@@ -37,38 +37,41 @@ class Game {
         this.renderer.render(this.hives);
     }
     
-    // Создание 4 ульев в углах карты
-    initializeHives() {
-        const hivePositions = [
-            { x: 5, y: 5 },                           // Верхний левый
-            { x: this.mapWidth - 8, y: 5 },           // Верхний правый
-            { x: 5, y: this.mapHeight - 8 },          // Нижний левый
-            { x: this.mapWidth - 8, y: this.mapHeight - 8 }  // Нижний правый
-        ];
-        
-        hivePositions.forEach((pos, index) => {
-            const hiveManager = new HiveManager(index, pos.x, pos.y, this.getHiveColor(index));
-            this.hives.push(hiveManager);
-            
-            // Создание структуры улья
-            const hiveStructure = new Hive(pos.x, pos.y, index);
-            hiveManager.structures.push(hiveStructure);
-            
-            // Создание королевы
-            hiveManager.createQueen();
-            
-            // Дать начальные ресурсы (для первых яиц)
-            hiveManager.addResource(ResourceType.BIOMASS, 20); // 20 биомассы для первых яиц
-            
-            // Спавн начальных ресурсов
-            this.gameMap.spawnStartingResources(pos.x, pos.y);
-        });
-    }
-    
-    // Получить цвет улья
+    // Получить цвет улья по его ID
     getHiveColor(id) {
         const colors = ['#FF4444', '#44FF44', '#4444FF', '#FFFF44'];
         return colors[id % colors.length];
+    }
+    
+    // Создание 4 ульев в углах карты
+    initializeHives() {
+        const hivePositions = [
+            { x: 5, y: 5 },                                    // Верхний левый
+            { x: this.mapWidth - 8, y: 5 },                    // Верхний правый
+            { x: 5, y: this.mapHeight - 8 },                   // Нижний левый
+            { x: this.mapWidth - 8, y: this.mapHeight - 8 }    // Нижний правый
+        ];
+        
+        hivePositions.forEach((pos, index) => {
+            const color = this.getHiveColor(index);
+            
+            // Создаём менеджер улья
+            const hiveManager = new HiveManager(index, pos.x, pos.y, color);
+            this.hives.push(hiveManager);
+            
+            // Создаём структуру улья (передаём цвет!)
+            const hiveStructure = new HiveStructure(pos.x, pos.y, index, color);
+            hiveManager.structures.push(hiveStructure);
+            
+            // Создаём королеву
+            hiveManager.createQueen();
+            
+            // Даём начальные ресурсы для первых яиц
+            hiveManager.addResource(ResourceType.BIOMASS, 20);
+            
+            // Спавн начальных ресурсов на карте рядом с ульем
+            this.gameMap.spawnStartingResources(pos.x, pos.y);
+        });
     }
     
     // Запуск симуляции
