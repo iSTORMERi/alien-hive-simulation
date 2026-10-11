@@ -17,6 +17,9 @@ class Game {
         // Создание системы феромонов
         this.pheromoneSystem = new PheromoneSystem(this.mapWidth, this.mapHeight);
         
+        // Создание боевой системы
+        this.combatSystem = new CombatSystem();
+        
         // Создание рендерера
         this.renderer = new Renderer(this.canvas, this.gameMap);
         
@@ -124,9 +127,17 @@ class Game {
     
     // Обновление логики игры
     update(deltaTime, currentTime) {
+        // 1. Обновление карты (регенерация ресурсов)
         this.gameMap.update();
+        
+        // 2. Обновление системы феромонов (испарение)
         this.pheromoneSystem.update(deltaTime);
+        
+        // 3. Обновление ульев (яйца, личинки, юниты, фермы)
         this.hives.forEach(hive => hive.update(deltaTime, currentTime, this.pheromoneSystem));
+        
+        // 4. Обновление боевой системы (атаки, смерти, феромоны тревоги)
+        this.combatSystem.update(deltaTime, this.hives, this.pheromoneSystem);
     }
 }
 
