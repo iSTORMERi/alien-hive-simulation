@@ -171,19 +171,18 @@ class Renderer {
                     pixelPos.y + sizeInPixels / 2
                 );
                 
-                if (structure.hp < structure.maxHP) {
-                    const barWidth = sizeInPixels;
-                    const barHeight = 2;
-                    const barX = pixelPos.x;
-                    const barY = pixelPos.y - 4;
-                    const hpPercent = structure.hp / structure.maxHP;
-                    
-                    this.ctx.fillStyle = '#333333';
-                    this.ctx.fillRect(barX, barY, barWidth, barHeight);
-                    
-                    this.ctx.fillStyle = hpPercent > 0.5 ? '#00FF00' : (hpPercent > 0.25 ? '#FFFF00' : '#FF0000');
-                    this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
-                }
+                // Полоска HP структуры (всегда видна)
+                const barWidth = sizeInPixels;
+                const barHeight = 2;
+                const barX = pixelPos.x;
+                const barY = pixelPos.y - 4;
+                const hpPercent = structure.hp / structure.maxHP;
+                
+                this.ctx.fillStyle = '#333333';
+                this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                
+                this.ctx.fillStyle = hpPercent > 0.5 ? '#00FF00' : (hpPercent > 0.25 ? '#FFFF00' : '#FF0000');
+                this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
             });
         });
     }
@@ -254,16 +253,34 @@ class Renderer {
                     default: size = 3;
                 }
                 
+                // Эффект атаки - красная вспышка
+                const isAttacking = unit.state === 'attacking' || unit.state === 'defending';
+                if (isAttacking && unit.lastAttackTime) {
+                    const timeSinceAttack = Date.now() - unit.lastAttackTime;
+                    if (timeSinceAttack < 200) { // 200мс вспышка
+                        this.ctx.fillStyle = '#FF0000';
+                        this.ctx.globalAlpha = 0.5 * (1 - timeSinceAttack / 200);
+                        this.ctx.beginPath();
+                        this.ctx.arc(pixelX, pixelY, size + 3, 0, Math.PI * 2);
+                        this.ctx.fill();
+                        this.ctx.globalAlpha = 1.0;
+                    }
+                }
+                
+                // Цвет юнита = цвет улья
                 this.ctx.fillStyle = hive.color;
                 
+                // Рисуем кружок
                 this.ctx.beginPath();
                 this.ctx.arc(pixelX, pixelY, size, 0, Math.PI * 2);
                 this.ctx.fill();
                 
+                // Тёмная обводка
                 this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
                 this.ctx.lineWidth = 0.5;
                 this.ctx.stroke();
                 
+                // Если юнит несёт ресурс, показать индикатор
                 if (unit.carrying && unit.carrying.amount > 0) {
                     let resColor;
                     switch(unit.carrying.type) {
@@ -279,8 +296,51 @@ class Renderer {
                     this.ctx.arc(pixelX, pixelY - size - 2, 1.5, 0, Math.PI * 2);
                     this.ctx.fill();
                 }
+                
+                // Полоска HP (если ранен)
+                if (unit.hp < unit.maxHP) {
+                    const barWidth = size * 2;
+                    const barHeight = 2;
+                    const barX = pixelX - barWidth / 2;
+                    const barY = pixelY - size - 5;
+                    const hpPercent = unit.hp / unit.maxHP;
+                    
+                    // Фон полоски
+                    this.ctx.fillStyle = '#333333';
+                    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                    
+                    // Сама полоска
+                    this.ctx.fillStyle = hpPercent > 0.5 ? '#00FF00' : (hpPercent > 0.25 ? '#FFFF00' : '#FF0000');
+                    this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+                }
+                
+                // Индикатор состояния (маленькая точка над юнитом)
+                let stateColor = null;
+                switch(unit.state) {
+                    case 'attacking':
+                    case 'defending':
+                        stateColor = '#FF0000'; // Красный - атака
+                        break;
+                    case 'fleeing':
+                        stateColor = '#FFA500'; // Оранжевый - бегство
+                        break;
+                    case 'building':
+                        stateColor = '#FFA500'; // Оранжевый - строительство
+                        break;
+                    case 'gathering':
+                        stateColor = '#00FF00'; // Зелёный - добыча
+                        break;
+                }
+                
+                if (stateColor) {
+                    this.ctx.fillStyle = stateColor;
+                    this.ctx.beginPath();
+                    this.ctx.arc(pixelX, pixelY - size - 8, 1.5, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
             });
             
+            // Отрисовка личинок
             hive.larvae.forEach(larva => {
                 const pixelX = larva.x * this.tileSize;
                 const pixelY = larva.y * this.tileSize;
