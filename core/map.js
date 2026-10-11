@@ -164,6 +164,24 @@ class GameMap {
         return true;
     }
     
+    // Удалить структуру с карты
+    removeStructure(structure) {
+        const size = structure.size;
+        
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const tileX = structure.x + dx;
+                const tileY = structure.y + dy;
+                
+                if (tileX >= 0 && tileX < this.width && tileY >= 0 && tileY < this.height) {
+                    if (this.tiles[tileY][tileX].structure === structure) {
+                        this.tiles[tileY][tileX].structure = null;
+                    }
+                }
+            }
+        }
+    }
+    
     // Найти место для строительства рядом с ульем
     findConstructionSpot(hiveX, hiveY, structureSize) {
         // Ищем свободное место в радиусе 10 тайлов от улья
