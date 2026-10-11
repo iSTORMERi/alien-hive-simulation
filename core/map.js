@@ -98,7 +98,7 @@ class GameMap {
                 const richness = Utils.randomInt(config.minRichness, config.maxRichness);
                 const amount = Utils.random(config.minAmount, config.maxAmount);
                 
-                // Создаём жилу (кластер из 1-3 ресурсов рядом)
+                // Создаём жилу
                 this.addResource(x, y, config.type, amount, richness);
                 placed++;
                 
@@ -128,6 +128,80 @@ class GameMap {
         });
         
         console.log(`Сгенерировано ресурсов: ${this.resourceManager.resources.length}`);
+    }
+    
+    // Разместить структуру на карте
+    placeStructure(structure) {
+        const size = structure.size;
+        
+        // Проверка, что структура помещается на карте
+        if (structure.x < 0 || structure.x + size > this.width ||
+            structure.y < 0 || structure.y + size > this.height) {
+            return false;
+        }
+        
+        // Проверка, что все тайлы свободны
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const tileX = structure.x + dx;
+                const tileY = structure.y + dy;
+                
+                if (this.tiles[tileY][tileX].structure) {
+                    return false; // Уже есть структура
+                }
+            }
+        }
+        
+        // Размещение структуры
+        for (let dy = 0; dy < size; dy++) {
+            for (let dx = 0; dx < size; dx++) {
+                const tileX = structure.x + dx;
+                const tileY = structure.y + dy;
+                this.tiles[tileY][tileX].structure = structure;
+            }
+        }
+        
+        return true;
+    }
+    
+    // Найти место для строительства рядом с ульем
+    findConstructionSpot(hiveX, hiveY, structureSize) {
+        // Ищем свободное место в радиусе 10 тайлов от улья
+        const searchRadius = 10;
+        
+        for (let radius = 4; radius <= searchRadius; radius++) {
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                const x = Math.floor(hiveX + Math.cos(angle) * radius);
+                const y = Math.floor(hiveY + Math.sin(angle) * radius);
+                
+                // Проверка, что структура помещается
+                if (x < 0 || x + structureSize > this.width ||
+                    y < 0 || y + structureSize > this.height) {
+                    continue;
+                }
+                
+                // Проверка, что все тайлы свободны
+                let free = true;
+                for (let dy = 0; dy < structureSize; dy++) {
+                    for (let dx = 0; dx < structureSize; dx++) {
+                        const tileX = x + dx;
+                        const tileY = y + dy;
+                        
+                        if (this.tiles[tileY][tileX].structure || this.tiles[tileY][tileX].resource) {
+                            free = false;
+                            break;
+                        }
+                    }
+                    if (!free) break;
+                }
+                
+                if (free) {
+                    return { x: x, y: y };
+                }
+            }
+        }
+        
+        return null; // Не нашли место
     }
     
     // Обновление карты
