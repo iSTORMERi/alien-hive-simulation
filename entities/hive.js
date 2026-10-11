@@ -145,21 +145,25 @@ class HiveManager {
     hatchLarva(larva) {
         let unit = null;
         
+        // Спавн рядом с ульём (случайное смещение 1-3 тайла)
+        const spawnX = this.x + 1 + Utils.random(-2, 2);
+        const spawnY = this.y + 1 + Utils.random(-2, 2);
+        
         // Определить тип юнита на основе ресурсов, которыми кормили личинку
         const fedResources = larva.getFedResources();
         
         if (fedResources[ResourceType.BIOPLASMA] >= 5 && fedResources[ResourceType.CHITIN] >= 2) {
-            // Солдат
-            unit = new Soldier(larva.x, larva.y, this.id);
+            // Солдат: 5 Био Плазма + 2 Хитина
+            unit = new Soldier(spawnX, spawnY, this.id);
         } else if (fedResources[ResourceType.BIOPLASMA] >= 5) {
-            // Разведчик
-            unit = new Scout(larva.x, larva.y, this.id);
-        } else if (fedResources[ResourceType.BIOPLASMA] >= 2) {
-            // Нянька
-            unit = new Nurse(larva.x, larva.y, this.id);
+            // Разведчик: 5 Био Плазма
+            unit = new Scout(spawnX, spawnY, this.id);
+        } else if (fedResources[ResourceType.BIOPLASMA] >= 2 && fedResources[ResourceType.BIOMASS] >= 1) {
+            // Нянька: 2 Био Плазма + 1 Био Масса
+            unit = new Nurse(spawnX, spawnY, this.id);
         } else {
-            // Рабочий (по умолчанию)
-            unit = new Worker(larva.x, larva.y, this.id);
+            // Рабочий: 3 Био Плазма (по умолчанию)
+            unit = new Worker(spawnX, spawnY, this.id);
         }
         
         this.addUnit(unit);
