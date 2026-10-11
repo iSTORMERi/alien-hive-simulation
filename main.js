@@ -47,19 +47,28 @@ class Game {
         ];
         
         hivePositions.forEach((pos, index) => {
-            const hive = new Hive(pos.x, pos.y, index);
-            this.hives.push(hive);
+            const hiveManager = new HiveManager(index, pos.x, pos.y, this.getHiveColor(index));
+            this.hives.push(hiveManager);
             
             // Создание структуры улья
             const hiveStructure = new Hive(pos.x, pos.y, index);
-            hive.structures.push(hiveStructure);
+            hiveManager.structures.push(hiveStructure);
             
             // Создание королевы
-            hive.createQueen();
+            hiveManager.createQueen();
+            
+            // Дать начальные ресурсы (для первых яиц)
+            hiveManager.addResource(ResourceType.BIOMASS, 20); // 20 биомассы для первых яиц
             
             // Спавн начальных ресурсов
             this.gameMap.spawnStartingResources(pos.x, pos.y);
         });
+    }
+    
+    // Получить цвет улья
+    getHiveColor(id) {
+        const colors = ['#FF4444', '#44FF44', '#4444FF', '#FFFF44'];
+        return colors[id % colors.length];
     }
     
     // Запуск симуляции
@@ -94,7 +103,7 @@ class Game {
         document.getElementById('time').textContent = `Time: ${elapsedTime}s`;
         
         // Обновление игры
-        this.update(deltaTime);
+        this.update(deltaTime, now);
         
         // Рендер
         this.renderer.render(this.hives);
@@ -104,16 +113,16 @@ class Game {
     }
     
     // Обновление логики игры
-    update(deltaTime) {
+    update(deltaTime, currentTime) {
         // Обновление карты (регенерация ресурсов)
         this.gameMap.update();
         
         // Обновление ульев
-        this.hives.forEach(hive => hive.update());
+        this.hives.forEach(hive => hive.update(deltaTime, currentTime));
     }
 }
 
 // Запуск игры после загрузки страницы
 window.addEventListener('load', () => {
-    new Game();
+    window.game = new Game(); // Сохраняем в window для доступа из других файлов
 });
