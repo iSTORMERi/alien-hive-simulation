@@ -36,6 +36,10 @@ class GameMap {
     
     // Добавить ресурс на карту
     addResource(x, y, type, amount, richness) {
+        // Проверка, что тайл свободен
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) return null;
+        if (this.tiles[y][x].resource) return null;
+        
         const resource = new Resource(type, x, y, amount, richness);
         this.tiles[y][x].resource = resource;
         this.resourceManager.addResource(resource);
@@ -53,6 +57,77 @@ class GameMap {
         const bioplasmaX = hiveX - Utils.randomInt(3, 6);
         const bioplasmaY = hiveY - Utils.randomInt(3, 6);
         this.addResource(bioplasmaX, bioplasmaY, ResourceType.BIOPLASMA, 50, 1);
+    }
+    
+    // Генерация дополнительных ресурсов по всей карте
+    generateResources(hivePositions) {
+        // Количество жил каждого типа
+        const resourceConfig = [
+            { type: ResourceType.BIOMASS, count: 40, minRichness: 1, maxRichness: 3, minAmount: 80, maxAmount: 300 },
+            { type: ResourceType.BIOPLASMA, count: 25, minRichness: 1, maxRichness: 2, minAmount: 40, maxAmount: 150 },
+            { type: ResourceType.CHITIN, count: 15, minRichness: 1, maxRichness: 2, minAmount: 50, maxAmount: 200 },
+            { type: ResourceType.NEURO_CRYSTAL, count: 4, minRichness: 1, maxRichness: 1, minAmount: 30, maxAmount: 80 }
+        ];
+        
+        resourceConfig.forEach(config => {
+            let placed = 0;
+            let attempts = 0;
+            const maxAttempts = config.count * 20;
+            
+            while (placed < config.count && attempts < maxAttempts) {
+                attempts++;
+                
+                // Случайная позиция
+                const x = Utils.randomInt(10, this.width - 10);
+                const y = Utils.randomInt(10, this.height - 10);
+                
+                // Проверка, что не слишком близко к ульям (минимум 15 тайлов)
+                let tooCloseToHive = false;
+                hivePositions.forEach(pos => {
+                    if (Utils.distance(x, y, pos.x + 1, pos.y + 1) < 15) {
+                        tooCloseToHive = true;
+                    }
+                });
+                
+                if (tooCloseToHive) continue;
+                
+                // Проверка, что тайл свободен
+                if (this.tiles[y][x].resource) continue;
+                
+                // Генерация параметров
+                const richness = Utils.randomInt(config.minRichness, config.maxRichness);
+                const amount = Utils.random(config.minAmount, config.maxAmount);
+                
+                // Создаём жилу (кластер из 1-3 ресурсов рядом)
+                this.addResource(x, y, config.type, amount, richness);
+                placed++;
+                
+                // Иногда добавляем соседние тайлы той же жилы
+                if (Math.random() < 0.5) {
+                    const neighbors = [
+                        { dx: 1, dy: 0 },
+                        { dx: -1, dy: 0 },
+                        { dx: 0, dy: 1 },
+                        { dx: 0, dy: -1 }
+                    ];
+                    
+                    const extraCount = Utils.randomInt(0, 2);
+                    for (let i = 0; i < extraCount; i++) {
+                        const n = neighbors[Utils.randomInt(0, neighbors.length - 1)];
+                        const nx = x + n.dx;
+                        const ny = y + n.dy;
+                        
+                        if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
+                            if (!this.tiles[ny][nx].resource) {
+                                this.addResource(nx, ny, config.type, amount * 0.7, richness);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        console.log(`Сгенерировано ресурсов: ${this.resourceManager.resources.length}`);
     }
     
     // Обновление карты
