@@ -145,7 +145,7 @@ class HiveManager {
     hatchLarva(larva) {
         let unit = null;
         
-        // Спавн рядом с ульём (случайное смещение 1-3 тайла)
+        // Спавн рядом с ульём (случайное смещение)
         const spawnX = this.x + 1 + Utils.random(-2, 2);
         const spawnY = this.y + 1 + Utils.random(-2, 2);
         
@@ -176,7 +176,7 @@ class HiveManager {
     }
     
     // Обновление улья
-    update(deltaTime, currentTime) {
+    update(deltaTime, currentTime, pheromoneSystem) {
         // Откладка яиц (первые 6 рабочих)
         if (this.initialEggsLaid < this.maxInitialEggs) {
             if (this.layEgg(currentTime)) {
@@ -190,7 +190,7 @@ class HiveManager {
         // Обновление юнитов
         this.units.forEach(unit => {
             if (!unit.isDead()) {
-                unit.update(deltaTime, this);
+                unit.update(deltaTime, this, pheromoneSystem);
             }
         });
         
