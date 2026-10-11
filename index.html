@@ -20,9 +20,59 @@
             margin-bottom: 20px;
         }
         
+        #gameContainer {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+        
         #gameCanvas {
             border: 2px solid #444;
             background-color: #0a0a0a;
+        }
+        
+        #sidebar {
+            width: 280px;
+            background-color: #222;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 15px;
+        }
+        
+        .hive-info {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: #2a2a2a;
+            border-left: 4px solid;
+        }
+        
+        .hive-info h3 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+        }
+        
+        .resource-line {
+            font-size: 12px;
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .resource-line span:first-child {
+            color: #aaa;
+        }
+        
+        .resource-line span:last-child {
+            font-weight: bold;
+        }
+        
+        .units-line {
+            font-size: 11px;
+            color: #888;
+            margin-top: 5px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
         }
         
         #controls {
@@ -49,11 +99,61 @@
             font-size: 14px;
             color: #aaa;
         }
+        
+        .legend {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #2a2a2a;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
     <h1>👽 Alien Hive Simulation</h1>
-    <canvas id="gameCanvas" width="1200" height="1200"></canvas>
+    
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="1200" height="1200"></canvas>
+        
+        <div id="sidebar">
+            <h2 style="margin-top: 0; font-size: 16px;">📊 Статистика ульев</h2>
+            <div id="hivesInfo"></div>
+            
+            <div class="legend">
+                <div style="font-weight: bold; margin-bottom: 5px;">Легенда:</div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #8B4513;"></div>
+                    <span>Био Масса</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #00FF00;"></div>
+                    <span>Био Плазма</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #708090;"></div>
+                    <span>Хитиновая руда</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background-color: #9370DB;"></div>
+                    <span>Нейро Кристалл</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <div id="controls">
         <button id="startBtn">Start Simulation</button>
         <button id="pauseBtn">Pause</button>
