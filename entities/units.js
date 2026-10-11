@@ -18,6 +18,10 @@ class Unit {
         this.target = null;
         this.lastEatTime = 0;
         this.eatCooldown = 180000; // 3 минуты
+        
+        // Феромоны
+        this.lastPheromoneTime = 0;
+        this.pheromoneCooldown = 500; // Оставляем феромон каждые 0.5 секунды
     }
     
     getMaxHP() {
@@ -125,8 +129,28 @@ class Unit {
         }
     }
     
+    // Оставить феромон
+    depositPheromone(pheromoneSystem, type, intensity, resourceType = null) {
+        const currentTime = Date.now();
+        
+        if (currentTime - this.lastPheromoneTime < this.pheromoneCooldown) {
+            return;
+        }
+        
+        pheromoneSystem.depositPheromone(
+            type,
+            this.x,
+            this.y,
+            intensity,
+            this.hiveId,
+            resourceType
+        );
+        
+        this.lastPheromoneTime = currentTime;
+    }
+    
     // Обновление юнита
-    update(deltaTime, hive) {
+    update(deltaTime, hive, pheromoneSystem) {
         // Поесть, если нужно
         this.eat(hive);
         
@@ -141,29 +165,42 @@ class Worker extends Unit {
         this.targetResource = null;
     }
     
-    update(deltaTime, hive) {
-        super.update(deltaTime, hive);
+    update(deltaTime, hive, pheromoneSystem) {
+        super.update(deltaTime, hive, pheromoneSystem);
         
-        // Простой ИИ для рабочего
+        // Простой ИИ для рабочего с феромонами
         switch(this.state) {
             case 'idle':
-                this.findResource(hive);
+                this.findResource(hive, pheromoneSystem);
                 break;
             case 'moving_to_resource':
-                this.moveToResource(deltaTime, hive);
+                this.moveToResource(deltaTime, hive, pheromoneSystem);
                 break;
             case 'gathering':
-                this.gatherResource(deltaTime, hive);
+                this.gatherResource(deltaTime, hive, pheromoneSystem);
                 break;
             case 'returning':
-                this.returnToHive(deltaTime, hive);
+                this.returnToHive(deltaTime, hive, pheromoneSystem);
                 break;
         }
     }
     
-    // Найти ресурс
-    findResource(hive) {
-        // Пока что просто ищем ближайший ресурс
+    // Найти ресурс (сначала ищем феромоны, потом случайно)
+    findResource(hive, pheromoneSystem) {
+        // Сначала пробуем найти по феромонам
+        const pheromoneTarget = pheromoneSystem.findNearestResourcePheromone(
+            this.x, this.y, this.hiveId, null
+        );
+        
+        if (pheromoneTarget && pheromoneTarget.intensity > 0.3) {
+            // Нашли сильный феромонный след, идём по нему
+            this.targetX = pheromoneTarget.x;
+            this.targetY = pheromoneTarget.y;
+            this.state = 'moving_to_resource';
+            return;
+        }
+        
+        // Если феромонов нет, ищем ближайший ресурс напрямую
         const resources = window.game.gameMap.getAllResources();
         let closest = null;
         let closestDist = Infinity;
@@ -180,27 +217,37 @@ class Worker extends Unit {
         
         if (closest) {
             this.targetResource = closest;
+            this.targetX = closest.x;
+            this.targetY = closest.y;
             this.state = 'moving_to_resource';
         }
     }
     
     // Движение к ресурсу
-    moveToResource(deltaTime, hive) {
-        if (!this.targetResource || !this.targetResource.hasResource()) {
+    moveToResource(deltaTime, hive, pheromoneSystem) {
+        // Оставляем феромон "дом" по пути
+        this.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
+        
+        const dist = this.moveTowards(this.targetX, this.targetY, deltaTime);
+        
+        // Проверяем, есть ли ресурс в этой точке
+        const resource = window.game.gameMap.resourceManager.getResourceAt(
+            Math.floor(this.targetX),
+            Math.floor(this.targetY)
+        );
+        
+        if (resource && resource.hasResource()) {
+            this.targetResource = resource;
+            this.state = 'gathering';
+        } else if (dist <= 1) {
+            // Достигли цели, но ресурса нет - ищем новый
             this.state = 'idle';
             this.targetResource = null;
-            return;
-        }
-        
-        const dist = this.moveTowards(this.targetResource.x, this.targetResource.y, deltaTime);
-        
-        if (dist <= 1) {
-            this.state = 'gathering';
         }
     }
     
     // Добыча ресурса
-    gatherResource(deltaTime, hive) {
+    gatherResource(deltaTime, hive, pheromoneSystem) {
         if (!this.targetResource || !this.targetResource.hasResource()) {
             this.state = 'idle';
             this.targetResource = null;
@@ -227,15 +274,35 @@ class Worker extends Unit {
                 this.carrying.amount += extracted;
             }
             
+            // Оставляем ресурсный феромон на месте добычи
+            this.depositPheromone(
+                pheromoneSystem,
+                PheromoneType.RESOURCE,
+                0.2,
+                this.targetResource.type
+            );
+            
             // Если набрали полную грузоподъемность, возвращаемся
             if (this.carrying.amount >= this.carryCapacity) {
                 this.state = 'returning';
+                this.targetX = hive.x + 1; // Центр улья
+                this.targetY = hive.y + 1;
             }
         }
     }
     
     // Возврат в улей
-    returnToHive(deltaTime, hive) {
+    returnToHive(deltaTime, hive, pheromoneSystem) {
+        // Оставляем ресурсный феромон по пути (чтобы другие шли по следу)
+        if (this.carrying) {
+            this.depositPheromone(
+                pheromoneSystem,
+                PheromoneType.RESOURCE,
+                0.3,
+                this.carrying.type
+            );
+        }
+        
         const hiveX = hive.x + 1; // Центр улья
         const hiveY = hive.y + 1;
         
@@ -257,8 +324,8 @@ class Nurse extends Unit {
         super('nurse', x, y, hiveId);
     }
     
-    update(deltaTime, hive) {
-        super.update(deltaTime, hive);
+    update(deltaTime, hive, pheromoneSystem) {
+        super.update(deltaTime, hive, pheromoneSystem);
         // Няньки кормят личинок (будет реализовано позже)
     }
 }
@@ -266,22 +333,120 @@ class Nurse extends Unit {
 class Scout extends Unit {
     constructor(x, y, hiveId) {
         super('scout', x, y, hiveId);
+        this.state = 'exploring';
+        this.exploreTarget = null;
     }
     
-    update(deltaTime, hive) {
-        super.update(deltaTime, hive);
-        // Разведчики исследуют карту (будет реализовано позже)
+    update(deltaTime, hive, pheromoneSystem) {
+        super.update(deltaTime, hive, pheromoneSystem);
+        
+        // Разведчики исследуют карту
+        switch(this.state) {
+            case 'exploring':
+                this.explore(deltaTime, hive, pheromoneSystem);
+                break;
+            case 'returning':
+                this.returnToHive(deltaTime, hive, pheromoneSystem);
+                break;
+        }
+    }
+    
+    // Исследование карты
+    explore(deltaTime, hive, pheromoneSystem) {
+        // Если нет цели, выбираем случайную точку
+        if (!this.exploreTarget) {
+            this.exploreTarget = {
+                x: Utils.random(10, window.game.mapWidth - 10),
+                y: Utils.random(10, window.game.mapHeight - 10)
+            };
+        }
+        
+        // Оставляем феромон "дом"
+        this.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.05);
+        
+        const dist = this.moveTowards(this.exploreTarget.x, this.exploreTarget.y, deltaTime);
+        
+        // Если достигли цели, выбираем новую
+        if (dist <= 2) {
+            this.exploreTarget = null;
+        }
+        
+        // Если нашли ресурс, оставляем феромон
+        const resource = window.game.gameMap.resourceManager.getResourceAt(
+            Math.floor(this.x),
+            Math.floor(this.y)
+        );
+        
+        if (resource && resource.hasResource()) {
+            this.depositPheromone(
+                pheromoneSystem,
+                PheromoneType.RESOURCE,
+                0.5,
+                resource.type
+            );
+        }
+    }
+    
+    // Возврат в улей
+    returnToHive(deltaTime, hive, pheromoneSystem) {
+        const hiveX = hive.x + 1;
+        const hiveY = hive.y + 1;
+        
+        const dist = this.moveTowards(hiveX, hiveY, deltaTime);
+        
+        if (dist <= 2) {
+            this.state = 'exploring';
+        }
     }
 }
 
 class Soldier extends Unit {
     constructor(x, y, hiveId) {
         super('soldier', x, y, hiveId);
+        this.state = 'guarding';
+        this.patrolTarget = null;
     }
     
-    update(deltaTime, hive) {
-        super.update(deltaTime, hive);
-        // Солдаты охраняют улей (будет реализовано позже)
+    update(deltaTime, hive, pheromoneSystem) {
+        super.update(deltaTime, hive, pheromoneSystem);
+        
+        // Солдаты охраняют улей
+        switch(this.state) {
+            case 'guarding':
+                this.guard(deltaTime, hive, pheromoneSystem);
+                break;
+            case 'patrolling':
+                this.patrol(deltaTime, hive, pheromoneSystem);
+                break;
+        }
+    }
+    
+    // Охрана улья
+    guard(deltaTime, hive, pheromoneSystem) {
+        // Патрулируем вокруг улья
+        if (!this.patrolTarget) {
+            const angle = Utils.random(0, Math.PI * 2);
+            const radius = Utils.random(5, 10);
+            this.patrolTarget = {
+                x: hive.x + 1 + Math.cos(angle) * radius,
+                y: hive.y + 1 + Math.sin(angle) * radius
+            };
+        }
+        
+        const dist = this.moveTowards(this.patrolTarget.x, this.patrolTarget.y, deltaTime);
+        
+        if (dist <= 1) {
+            this.patrolTarget = null;
+        }
+        
+        // Оставляем феромон "дом"
+        this.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
+    }
+    
+    // Патрулирование
+    patrol(deltaTime, hive, pheromoneSystem) {
+        // Здесь будет логика реагирования на феромоны тревоги
+        this.guard(deltaTime, hive, pheromoneSystem);
     }
 }
 
@@ -290,8 +455,8 @@ class Queen extends Unit {
         super('queen', x, y, hiveId);
     }
     
-    update(deltaTime, hive) {
-        super.update(deltaTime, hive);
+    update(deltaTime, hive, pheromoneSystem) {
+        super.update(deltaTime, hive, pheromoneSystem);
         // Королева не двигается
     }
 }
