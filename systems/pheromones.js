@@ -90,7 +90,7 @@ class PheromoneSystem {
         let bestX = 0;
         let bestY = 0;
         
-        // Поиск в радиусе 20 тайлов (можно настроить)
+        // Поиск в радиусе 20 тайлов
         const searchRadius = 20;
         
         for (let dy = -searchRadius; dy <= searchRadius; dy++) {
@@ -112,6 +112,53 @@ class PheromoneSystem {
                     const distance = Utils.distance(x, y, checkX, checkY);
                     
                     // Учитываем интенсивность (более сильные следы привлекательнее)
+                    const score = distance / pheromone.intensity;
+                    
+                    if (score < bestDistance) {
+                        bestDistance = score;
+                        bestPheromone = pheromone;
+                        bestX = checkX;
+                        bestY = checkY;
+                    }
+                }
+            }
+        }
+        
+        if (bestPheromone) {
+            return { x: bestX, y: bestY, intensity: bestPheromone.intensity };
+        }
+        
+        return null;
+    }
+    
+    // Найти ближайший феромон тревоги (для солдат)
+    findNearestDangerPheromone(x, y, hiveId) {
+        let bestPheromone = null;
+        let bestDistance = Infinity;
+        let bestX = 0;
+        let bestY = 0;
+        
+        // Поиск в радиусе 25 тайлов (чуть больше, чем для ресурсов)
+        const searchRadius = 25;
+        
+        for (let dy = -searchRadius; dy <= searchRadius; dy++) {
+            for (let dx = -searchRadius; dx <= searchRadius; dx++) {
+                const checkX = Math.floor(x) + dx;
+                const checkY = Math.floor(y) + dy;
+                
+                if (checkX < 0 || checkX >= this.width || checkY < 0 || checkY >= this.height) {
+                    continue;
+                }
+                
+                const pheromone = this.pheromones[PheromoneType.DANGER][checkY][checkX];
+                
+                if (pheromone && 
+                    pheromone.hiveId === hiveId &&
+                    pheromone.intensity > 0.2) {
+                    
+                    const distance = Utils.distance(x, y, checkX, checkY);
+                    
+                    // Учитываем интенсивность (более сильные следы тревоги привлекательнее)
                     const score = distance / pheromone.intensity;
                     
                     if (score < bestDistance) {
