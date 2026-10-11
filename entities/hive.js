@@ -126,6 +126,102 @@ class HiveManager {
         return slots;
     }
     
+    // Получить общую емкость хранилищ
+    getTotalStorageCapacity() {
+        let solidCapacity = 50; // Базовая емкость улья
+        let liquidCapacity = 30;
+        
+        this.structures.forEach(structure => {
+            if (structure.type === 'storage_solid') {
+                solidCapacity += structure.capacity;
+            } else if (structure.type === 'storage_liquid') {
+                liquidCapacity += structure.capacity;
+            }
+        });
+        
+        return { solid: solidCapacity, liquid: liquidCapacity };
+    }
+    
+    // Обновить лимиты хранилищ
+    updateStorageCapacity() {
+        const capacity = this.getTotalStorageCapacity();
+        this.solidStorageCapacity = capacity.solid;
+        this.liquidStorageCapacity = capacity.liquid;
+    }
+    
+    // Определить, что нужно построить
+    getConstructionPriority() {
+        const storage = this.getTotalStorageCapacity();
+        
+        // Подсчёт юнитов
+        const unitCounts = {
+            worker: 0,
+            nurse: 0,
+            scout: 0,
+            soldier: 0
+        };
+        
+        this.units.forEach(u => {
+            if (unitCounts[u.type] !== undefined) {
+                unitCounts[u.type]++;
+            }
+        });
+        
+        // Приоритет 1: Хранилища (если заполнены больше чем на 80%)
+        const biomassFull = this.resources[ResourceType.BIOMASS] / storage.solid > 0.8;
+        const bioplasmaFull = this.resources[ResourceType.BIOPLASMA] / storage.liquid > 0.8;
+        
+        if (biomassFull && this.resources[ResourceType.BIOMASS] >= 8 && this.resources[ResourceType.CHITIN] >= 3) {
+            return { type: 'storage_solid', priority: 1 };
+        }
+        
+        if (bioplasmaFull && this.resources[ResourceType.BIOMASS] >= 10 && this.resources[ResourceType.CHITIN] >= 5) {
+            return { type: 'storage_liquid', priority: 1 };
+        }
+        
+        // Приоритет 2: Инкубаторы (если мало слотов для личинок)
+        const totalSlots = this.getTotalLarvaeSlots();
+        const freeSlots = totalSlots - this.larvae.length;
+        
+        if (freeSlots < 3 && this.resources[ResourceType.BIOMASS] >= 10 && this.resources[ResourceType.CHITIN] >= 5) {
+            return { type: 'incubator', priority: 2 };
+        }
+        
+        // Приоритет 3: Фермы биомассы (если мало еды)
+        if (this.resources[ResourceType.BIOMASS] < 20 && this.resources[ResourceType.BIOMASS] >= 70 && this.resources[ResourceType.CHITIN] >= 10) {
+            return { type: 'biomass_farm', priority: 3 };
+        }
+        
+        return null;
+    }
+    
+    // Построить структуру
+    buildStructure(type, x, y) {
+        let structure = null;
+        
+        switch(type) {
+            case 'storage_solid':
+                structure = new StorageSolid(x, y, this.id, this.color);
+                break;
+            case 'storage_liquid':
+                structure = new StorageLiquid(x, y, this.id, this.color);
+                break;
+            case 'biomass_farm':
+                structure = new BiomassFarm(x, y, this.id, this.color);
+                break;
+            case 'incubator':
+                structure = new Incubator(x, y, this.id, this.color);
+                break;
+            default:
+                return false;
+        }
+        
+        this.structures.push(structure);
+        this.updateStorageCapacity();
+        
+        return true;
+    }
+    
     // Обновление личинок
     updateLarvae(deltaTime) {
         this.larvae.forEach(larva => {
@@ -186,6 +282,14 @@ class HiveManager {
         
         // Обновление личинок
         this.updateLarvae(deltaTime);
+        
+        // Производство ферм биомассы
+        this.structures.forEach(structure => {
+            if (structure.type === 'biomass_farm') {
+                const produced = structure.produce();
+                this.addResource(ResourceType.BIOMASS, produced);
+            }
+        });
         
         // Обновление юнитов
         this.units.forEach(unit => {
