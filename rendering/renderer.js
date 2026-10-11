@@ -14,20 +14,20 @@ class Renderer {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
-    // Отрисовка карты
+    // Отрисовка сетки карты
     renderMap() {
-        // Отрисовка сетки (опционально, для отладки)
-        this.ctx.strokeStyle = '#1a1a1a';
-        this.ctx.lineWidth = 0.5;
+        this.ctx.strokeStyle = '#111111';
+        this.ctx.lineWidth = 0.3;
         
-        for (let x = 0; x <= this.gameMap.width; x++) {
+        // Рисуем сетку каждые 10 тайлов, чтобы не перегружать
+        for (let x = 0; x <= this.gameMap.width; x += 10) {
             this.ctx.beginPath();
             this.ctx.moveTo(x * this.tileSize, 0);
             this.ctx.lineTo(x * this.tileSize, this.canvas.height);
             this.ctx.stroke();
         }
         
-        for (let y = 0; y <= this.gameMap.height; y++) {
+        for (let y = 0; y <= this.gameMap.height; y += 10) {
             this.ctx.beginPath();
             this.ctx.moveTo(0, y * this.tileSize);
             this.ctx.lineTo(this.canvas.width, y * this.tileSize);
@@ -42,7 +42,6 @@ class Renderer {
         resources.forEach(resource => {
             const pixelPos = Utils.tileToPixel(resource.x, resource.y, this.tileSize);
             
-            // Цвет зависит от типа ресурса
             let color;
             switch(resource.type) {
                 case ResourceType.BIOMASS:
@@ -59,7 +58,6 @@ class Renderer {
                     break;
             }
             
-            // Интенсивность зависит от количества ресурса
             const intensity = resource.amount / resource.maxAmount;
             this.ctx.globalAlpha = 0.3 + intensity * 0.7;
             
@@ -75,42 +73,83 @@ class Renderer {
         });
     }
     
-    // Отрисовка ульев
-    renderHives(hives) {
+    // Отрисовка структур улья
+    renderStructures(hives) {
         hives.forEach(hive => {
-            const pixelPos = Utils.tileToPixel(hive.x, hive.y, this.tileSize);
-            
-            // Цвет улья
-            this.ctx.fillStyle = hive.color;
-            
-            // Улей занимает 3x3 тайла
-            this.ctx.fillRect(
-                pixelPos.x,
-                pixelPos.y,
-                this.tileSize * 3,
-                this.tileSize * 3
-            );
-            
-            // Обводка
-            this.ctx.strokeStyle = '#ffffff';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(
-                pixelPos.x,
-                pixelPos.y,
-                this.tileSize * 3,
-                this.tileSize * 3
-            );
-            
-            // Текст с номером улья
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.font = '16px Arial';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(
-                `H${hive.id}`,
-                pixelPos.x + (this.tileSize * 3) / 2,
-                pixelPos.y + (this.tileSize * 3) / 2
-            );
+            hive.structures.forEach(structure => {
+                const pixelPos = Utils.tileToPixel(structure.x, structure.y, this.tileSize);
+                const sizeInPixels = structure.size * this.tileSize;
+                
+                // Основной цвет структуры — цвет улья
+                this.ctx.fillStyle = structure.color;
+                this.ctx.globalAlpha = 0.6;
+                this.ctx.fillRect(
+                    pixelPos.x,
+                    pixelPos.y,
+                    sizeInPixels,
+                    sizeInPixels
+                );
+                this.ctx.globalAlpha = 1.0;
+                
+                // Обводка
+                this.ctx.strokeStyle = structure.color;
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(
+                    pixelPos.x,
+                    pixelPos.y,
+                    sizeInPixels,
+                    sizeInPixels
+                );
+                
+                // Иконка/символ внутри структуры
+                this.ctx.fillStyle = '#ffffff';
+                this.ctx.font = '10px Arial';
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                
+                let icon = '';
+                switch(structure.type) {
+                    case 'hive':
+                        icon = '👑';
+                        this.ctx.font = '14px Arial';
+                        break;
+                    case 'storage_solid':
+                        icon = '📦';
+                        break;
+                    case 'storage_liquid':
+                        icon = '💧';
+                        break;
+                    case 'biomass_farm':
+                        icon = '🌿';
+                        break;
+                    case 'incubator':
+                        icon = '🥚';
+                        break;
+                }
+                
+                this.ctx.fillText(
+                    icon,
+                    pixelPos.x + sizeInPixels / 2,
+                    pixelPos.y + sizeInPixels / 2
+                );
+                
+                // Полоска HP (если структура повреждена)
+                if (structure.hp < structure.maxHP) {
+                    const barWidth = sizeInPixels;
+                    const barHeight = 2;
+                    const barX = pixelPos.x;
+                    const barY = pixelPos.y - 4;
+                    const hpPercent = structure.hp / structure.maxHP;
+                    
+                    // Фон полоски
+                    this.ctx.fillStyle = '#333333';
+                    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                    
+                    // Сама полоска
+                    this.ctx.fillStyle = hpPercent > 0.5 ? '#00FF00' : (hpPercent > 0.25 ? '#FFFF00' : '#FF0000');
+                    this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
+                }
+            });
         });
     }
     
@@ -124,15 +163,15 @@ class Renderer {
                 // Размер зависит от типа юнита
                 let size;
                 switch(unit.type) {
-                    case 'nurse': size = 4; break;
-                    case 'worker': size = 5; break;
-                    case 'scout': size = 6; break;
-                    case 'soldier': size = 7; break;
-                    case 'queen': size = 8; break;
-                    default: size = 5;
+                    case 'nurse': size = 2; break;    // Самый маленький
+                    case 'worker': size = 3; break;    // Средний
+                    case 'scout': size = 3.5; break;   // Чуть больше рабочего
+                    case 'soldier': size = 4; break;   // Самый большой
+                    case 'queen': size = 5; break;     // Королева
+                    default: size = 3;
                 }
                 
-                // Цвет юнита (цвет улья)
+                // Цвет юнита = цвет улья
                 this.ctx.fillStyle = hive.color;
                 
                 // Рисуем кружок
@@ -140,16 +179,25 @@ class Renderer {
                 this.ctx.arc(pixelX, pixelY, size, 0, Math.PI * 2);
                 this.ctx.fill();
                 
-                // Обводка
-                this.ctx.strokeStyle = '#ffffff';
-                this.ctx.lineWidth = 1;
+                // Тёмная обводка для контраста
+                this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                this.ctx.lineWidth = 0.5;
                 this.ctx.stroke();
                 
-                // Если юнит несет ресурс, показать индикатор
-                if (unit.carrying) {
-                    this.ctx.fillStyle = '#FFFF00';
+                // Если юнит несет ресурс, показать жёлтый индикатор
+                if (unit.carrying && unit.carrying.amount > 0) {
+                    let resColor;
+                    switch(unit.carrying.type) {
+                        case ResourceType.BIOMASS: resColor = '#8B4513'; break;
+                        case ResourceType.BIOPLASMA: resColor = '#00FF00'; break;
+                        case ResourceType.CHITIN: resColor = '#708090'; break;
+                        case ResourceType.NEURO_CRYSTAL: resColor = '#9370DB'; break;
+                        default: resColor = '#FFFF00';
+                    }
+                    
+                    this.ctx.fillStyle = resColor;
                     this.ctx.beginPath();
-                    this.ctx.arc(pixelX, pixelY - size - 2, 2, 0, Math.PI * 2);
+                    this.ctx.arc(pixelX, pixelY - size - 2, 1.5, 0, Math.PI * 2);
                     this.ctx.fill();
                 }
             });
@@ -159,12 +207,26 @@ class Renderer {
                 const pixelX = larva.x * this.tileSize;
                 const pixelY = larva.y * this.tileSize;
                 
+                // Личинки — полупрозрачные, цвет улья
                 this.ctx.fillStyle = hive.color;
-                this.ctx.globalAlpha = 0.5;
+                this.ctx.globalAlpha = 0.4;
                 this.ctx.beginPath();
-                this.ctx.arc(pixelX, pixelY, 3, 0, Math.PI * 2);
+                this.ctx.arc(pixelX, pixelY, 2, 0, Math.PI * 2);
                 this.ctx.fill();
                 this.ctx.globalAlpha = 1.0;
+                
+                // Прогресс-бар развития личинки
+                const barWidth = 6;
+                const barHeight = 1;
+                const barX = pixelX - barWidth / 2;
+                const barY = pixelY + 3;
+                const progress = larva.developmentProgress / larva.requiredDevelopment;
+                
+                this.ctx.fillStyle = '#333333';
+                this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                
+                this.ctx.fillStyle = '#00FFFF';
+                this.ctx.fillRect(barX, barY, barWidth * Math.min(progress, 1), barHeight);
             });
         });
     }
@@ -174,7 +236,7 @@ class Renderer {
         this.clear();
         this.renderMap();
         this.renderResources();
-        this.renderHives(hives);
+        this.renderStructures(hives);  // <-- НОВОЕ: отрисовка структур
         this.renderUnits(hives);
     }
 }
