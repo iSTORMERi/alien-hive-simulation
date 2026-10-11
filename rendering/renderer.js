@@ -19,7 +19,7 @@ class Renderer {
         this.ctx.strokeStyle = '#111111';
         this.ctx.lineWidth = 0.3;
         
-        // Рисуем сетку каждые 10 тайлов, чтобы не перегружать
+        // Рисуем сетку каждые 10 тайлов
         for (let x = 0; x <= this.gameMap.width; x += 10) {
             this.ctx.beginPath();
             this.ctx.moveTo(x * this.tileSize, 0);
@@ -67,6 +67,48 @@ class Renderer {
                 pixelPos.y + 1,
                 this.tileSize - 2,
                 this.tileSize - 2
+            );
+            
+            this.ctx.globalAlpha = 1.0;
+        });
+    }
+    
+    // Отрисовка феромонов
+    renderPheromones(pheromoneSystem) {
+        const pheromones = pheromoneSystem.getAllPheromones();
+        
+        pheromones.forEach(p => {
+            const pixelPos = Utils.tileToPixel(p.x, p.y, this.tileSize);
+            
+            let color;
+            switch(p.type) {
+                case PheromoneType.RESOURCE:
+                    // Цвет ресурса
+                    switch(p.resourceType) {
+                        case ResourceType.BIOMASS: color = '#8B4513'; break;
+                        case ResourceType.BIOPLASMA: color = '#00FF00'; break;
+                        case ResourceType.CHITIN: color = '#708090'; break;
+                        case ResourceType.NEURO_CRYSTAL: color = '#9370DB'; break;
+                        default: color = '#FFFF00';
+                    }
+                    break;
+                case PheromoneType.DANGER:
+                    color = '#FF0000'; // Красный
+                    break;
+                case PheromoneType.HOME:
+                    color = '#00BFFF'; // Голубой
+                    break;
+            }
+            
+            // Интенсивность определяет прозрачность
+            this.ctx.globalAlpha = p.intensity * 0.5;
+            
+            this.ctx.fillStyle = color;
+            this.ctx.fillRect(
+                pixelPos.x,
+                pixelPos.y,
+                this.tileSize,
+                this.tileSize
             );
             
             this.ctx.globalAlpha = 1.0;
@@ -141,11 +183,9 @@ class Renderer {
                     const barY = pixelPos.y - 4;
                     const hpPercent = structure.hp / structure.maxHP;
                     
-                    // Фон полоски
                     this.ctx.fillStyle = '#333333';
                     this.ctx.fillRect(barX, barY, barWidth, barHeight);
                     
-                    // Сама полоска
                     this.ctx.fillStyle = hpPercent > 0.5 ? '#00FF00' : (hpPercent > 0.25 ? '#FFFF00' : '#FF0000');
                     this.ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
                 }
@@ -163,11 +203,11 @@ class Renderer {
                 // Размер зависит от типа юнита
                 let size;
                 switch(unit.type) {
-                    case 'nurse': size = 2; break;    // Самый маленький
-                    case 'worker': size = 3; break;    // Средний
-                    case 'scout': size = 3.5; break;   // Чуть больше рабочего
-                    case 'soldier': size = 4; break;   // Самый большой
-                    case 'queen': size = 5; break;     // Королева
+                    case 'nurse': size = 2; break;
+                    case 'worker': size = 3; break;
+                    case 'scout': size = 3.5; break;
+                    case 'soldier': size = 4; break;
+                    case 'queen': size = 5; break;
                     default: size = 3;
                 }
                 
@@ -179,12 +219,12 @@ class Renderer {
                 this.ctx.arc(pixelX, pixelY, size, 0, Math.PI * 2);
                 this.ctx.fill();
                 
-                // Тёмная обводка для контраста
+                // Тёмная обводка
                 this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
                 this.ctx.lineWidth = 0.5;
                 this.ctx.stroke();
                 
-                // Если юнит несет ресурс, показать жёлтый индикатор
+                // Если юнит несет ресурс, показать индикатор
                 if (unit.carrying && unit.carrying.amount > 0) {
                     let resColor;
                     switch(unit.carrying.type) {
@@ -207,7 +247,6 @@ class Renderer {
                 const pixelX = larva.x * this.tileSize;
                 const pixelY = larva.y * this.tileSize;
                 
-                // Личинки — полупрозрачные, цвет улья
                 this.ctx.fillStyle = hive.color;
                 this.ctx.globalAlpha = 0.4;
                 this.ctx.beginPath();
@@ -215,7 +254,7 @@ class Renderer {
                 this.ctx.fill();
                 this.ctx.globalAlpha = 1.0;
                 
-                // Прогресс-бар развития личинки
+                // Прогресс-бар развития
                 const barWidth = 6;
                 const barHeight = 1;
                 const barX = pixelX - barWidth / 2;
@@ -232,11 +271,12 @@ class Renderer {
     }
     
     // Полная отрисовка
-    render(hives) {
+    render(hives, pheromoneSystem) {
         this.clear();
         this.renderMap();
         this.renderResources();
-        this.renderStructures(hives);  // <-- НОВОЕ: отрисовка структур
+        this.renderPheromones(pheromoneSystem); // <-- НОВОЕ: отрисовка феромонов
+        this.renderStructures(hives);
         this.renderUnits(hives);
     }
 }
