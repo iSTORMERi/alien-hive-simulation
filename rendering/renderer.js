@@ -114,11 +114,67 @@ class Renderer {
         });
     }
     
+    // Отрисовка юнитов
+    renderUnits(hives) {
+        hives.forEach(hive => {
+            hive.units.forEach(unit => {
+                const pixelX = unit.x * this.tileSize;
+                const pixelY = unit.y * this.tileSize;
+                
+                // Размер зависит от типа юнита
+                let size;
+                switch(unit.type) {
+                    case 'nurse': size = 4; break;
+                    case 'worker': size = 5; break;
+                    case 'scout': size = 6; break;
+                    case 'soldier': size = 7; break;
+                    case 'queen': size = 8; break;
+                    default: size = 5;
+                }
+                
+                // Цвет юнита (цвет улья)
+                this.ctx.fillStyle = hive.color;
+                
+                // Рисуем кружок
+                this.ctx.beginPath();
+                this.ctx.arc(pixelX, pixelY, size, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                // Обводка
+                this.ctx.strokeStyle = '#ffffff';
+                this.ctx.lineWidth = 1;
+                this.ctx.stroke();
+                
+                // Если юнит несет ресурс, показать индикатор
+                if (unit.carrying) {
+                    this.ctx.fillStyle = '#FFFF00';
+                    this.ctx.beginPath();
+                    this.ctx.arc(pixelX, pixelY - size - 2, 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            });
+            
+            // Отрисовка личинок
+            hive.larvae.forEach(larva => {
+                const pixelX = larva.x * this.tileSize;
+                const pixelY = larva.y * this.tileSize;
+                
+                this.ctx.fillStyle = hive.color;
+                this.ctx.globalAlpha = 0.5;
+                this.ctx.beginPath();
+                this.ctx.arc(pixelX, pixelY, 3, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+            });
+        });
+    }
+    
     // Полная отрисовка
     render(hives) {
         this.clear();
         this.renderMap();
         this.renderResources();
         this.renderHives(hives);
+        this.renderUnits(hives);
     }
 }
