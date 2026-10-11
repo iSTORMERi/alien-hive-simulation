@@ -14,6 +14,9 @@ class Game {
         // Создание карты
         this.gameMap = new GameMap(this.mapWidth, this.mapHeight, this.tileSize);
         
+        // Создание системы феромонов
+        this.pheromoneSystem = new PheromoneSystem(this.mapWidth, this.mapHeight);
+        
         // Создание рендерера
         this.renderer = new Renderer(this.canvas, this.gameMap);
         
@@ -34,7 +37,7 @@ class Game {
         document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
         
         // Первый рендер
-        this.renderer.render(this.hives);
+        this.renderer.render(this.hives, this.pheromoneSystem);
     }
     
     // Получить цвет улья по его ID
@@ -46,30 +49,25 @@ class Game {
     // Создание 4 ульев в углах карты
     initializeHives() {
         const hivePositions = [
-            { x: 5, y: 5 },                                    // Верхний левый
-            { x: this.mapWidth - 8, y: 5 },                    // Верхний правый
-            { x: 5, y: this.mapHeight - 8 },                   // Нижний левый
-            { x: this.mapWidth - 8, y: this.mapHeight - 8 }    // Нижний правый
+            { x: 5, y: 5 },
+            { x: this.mapWidth - 8, y: 5 },
+            { x: 5, y: this.mapHeight - 8 },
+            { x: this.mapWidth - 8, y: this.mapHeight - 8 }
         ];
         
         hivePositions.forEach((pos, index) => {
             const color = this.getHiveColor(index);
             
-            // Создаём менеджер улья
             const hiveManager = new HiveManager(index, pos.x, pos.y, color);
             this.hives.push(hiveManager);
             
-            // Создаём структуру улья (передаём цвет!)
             const hiveStructure = new HiveStructure(pos.x, pos.y, index, color);
             hiveManager.structures.push(hiveStructure);
             
-            // Создаём королеву
             hiveManager.createQueen();
             
-            // Даём начальные ресурсы для первых яиц
             hiveManager.addResource(ResourceType.BIOMASS, 20);
             
-            // Спавн начальных ресурсов на карте рядом с ульем
             this.gameMap.spawnStartingResources(pos.x, pos.y);
         });
     }
@@ -109,7 +107,7 @@ class Game {
         this.update(deltaTime, now);
         
         // Рендер
-        this.renderer.render(this.hives);
+        this.renderer.render(this.hives, this.pheromoneSystem);
         
         // Следующий кадр
         requestAnimationFrame(() => this.gameLoop());
@@ -117,15 +115,18 @@ class Game {
     
     // Обновление логики игры
     update(deltaTime, currentTime) {
-        // Обновление карты (регенерация ресурсов)
+        // Обновление карты
         this.gameMap.update();
         
+        // Обновление системы феромонов
+        this.pheromoneSystem.update(deltaTime);
+        
         // Обновление ульев
-        this.hives.forEach(hive => hive.update(deltaTime, currentTime));
+        this.hives.forEach(hive => hive.update(deltaTime, currentTime, this.pheromoneSystem));
     }
 }
 
 // Запуск игры после загрузки страницы
 window.addEventListener('load', () => {
-    window.game = new Game(); // Сохраняем в window для доступа из других файлов
+    window.game = new Game();
 });
