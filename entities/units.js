@@ -153,8 +153,6 @@ class Unit {
     update(deltaTime, hive, pheromoneSystem) {
         // Поесть, если нужно
         this.eat(hive);
-        
-        // Здесь будет специфичная логика для каждой касты
     }
 }
 
@@ -163,15 +161,18 @@ class Worker extends Unit {
         super('worker', x, y, hiveId);
         this.state = 'idle';
         this.targetResource = null;
+        this.constructionTarget = null;
+        this.buildProgress = 0;
+        this.buildRequired = 100; // 100% для завершения строительства
     }
     
     update(deltaTime, hive, pheromoneSystem) {
         super.update(deltaTime, hive, pheromoneSystem);
         
-        // Простой ИИ для рабочего с феромонами
+        // ИИ для рабочего с приоритетами
         switch(this.state) {
             case 'idle':
-                this.findResource(hive, pheromoneSystem);
+                this.decideAction(hive, pheromoneSystem);
                 break;
             case 'moving_to_resource':
                 this.moveToResource(deltaTime, hive, pheromoneSystem);
@@ -182,6 +183,156 @@ class Worker extends Unit {
             case 'returning':
                 this.returnToHive(deltaTime, hive, pheromoneSystem);
                 break;
+            case 'moving_to_build':
+                this.moveToConstruction(deltaTime, hive, pheromoneSystem);
+                break;
+            case 'building':
+                this.build(deltaTime, hive, pheromoneSystem);
+                break;
+        }
+    }
+    
+    // Принятие решения, что делать
+    decideAction(hive, pheromoneSystem) {
+        // Приоритет 1: Строительство (если есть что строить)
+        const constructionPriority = hive.getConstructionPriority();
+        if (constructionPriority && Math.random() < 0.3) { // 30% шанс заняться строительством
+            if (this.tryToStartConstruction(hive)) {
+                return;
+            }
+        }
+        
+        // Приоритет 2: Поиск ресурсов
+        this.findResource(hive, pheromoneSystem);
+    }
+    
+    // Попытка начать строительство
+    tryToStartConstruction(hive) {
+        const priority = hive.getConstructionPriority();
+        if (!priority) return false;
+        
+        const type = priority.type;
+        
+        // Проверка ресурсов
+        let canBuild = false;
+        switch(type) {
+            case 'storage_solid':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 8 && hive.resources[ResourceType.CHITIN] >= 3;
+                break;
+            case 'storage_liquid':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 10 && hive.resources[ResourceType.CHITIN] >= 5;
+                break;
+            case 'incubator':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 10 && hive.resources[ResourceType.CHITIN] >= 5;
+                break;
+            case 'biomass_farm':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 70 && hive.resources[ResourceType.CHITIN] >= 10;
+                break;
+        }
+        
+        if (!canBuild) return false;
+        
+        // Найти место для строительства
+        const structureSize = this.getStructureSize(type);
+        const spot = window.game.gameMap.findConstructionSpot(hive.x, hive.y, structureSize);
+        
+        if (!spot) return false;
+        
+        // Создать структуру (пока что не размещаем на карте)
+        let structure = null;
+        switch(type) {
+            case 'storage_solid':
+                structure = new StorageSolid(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'storage_liquid':
+                structure = new StorageLiquid(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'incubator':
+                structure = new Incubator(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'biomass_farm':
+                structure = new BiomassFarm(spot.x, spot.y, hive.id, hive.color);
+                break;
+        }
+        
+        this.constructionTarget = structure;
+        this.buildProgress = 0;
+        this.targetX = spot.x + structureSize / 2;
+        this.targetY = spot.y + structureSize / 2;
+        this.state = 'moving_to_build';
+        
+        return true;
+    }
+    
+    // Получить размер структуры
+    getStructureSize(type) {
+        switch(type) {
+            case 'storage_solid':
+            case 'storage_liquid':
+            case 'incubator':
+                return 2;
+            case 'biomass_farm':
+                return 3;
+            default:
+                return 2;
+        }
+    }
+    
+    // Движение к месту строительства
+    moveToConstruction(deltaTime, hive, pheromoneSystem) {
+        if (!this.constructionTarget) {
+            this.state = 'idle';
+            return;
+        }
+        
+        const dist = this.moveTowards(this.targetX, this.targetY, deltaTime);
+        
+        if (dist <= 1) {
+            this.state = 'building';
+        }
+    }
+    
+    // Строительство
+    build(deltaTime, hive, pheromoneSystem) {
+        if (!this.constructionTarget) {
+            this.state = 'idle';
+            return;
+        }
+        
+        // Увеличиваем прогресс строительства
+        this.buildProgress += deltaTime * 20; // 20% в секунду
+        
+        if (this.buildProgress >= this.buildRequired) {
+            // Строительство завершено!
+            
+            // Списываем ресурсы
+            const type = this.constructionTarget.type;
+            switch(type) {
+                case 'storage_solid':
+                    hive.spendResource(ResourceType.BIOMASS, 8);
+                    hive.spendResource(ResourceType.CHITIN, 3);
+                    break;
+                case 'storage_liquid':
+                    hive.spendResource(ResourceType.BIOMASS, 10);
+                    hive.spendResource(ResourceType.CHITIN, 5);
+                    break;
+                case 'incubator':
+                    hive.spendResource(ResourceType.BIOMASS, 10);
+                    hive.spendResource(ResourceType.CHITIN, 5);
+                    break;
+                case 'biomass_farm':
+                    hive.spendResource(ResourceType.BIOMASS, 70);
+                    hive.spendResource(ResourceType.CHITIN, 10);
+                    break;
+            }
+            
+            // Размещаем структуру на карте
+            window.game.gameMap.placeStructure(this.constructionTarget);
+            hive.buildStructure(type, this.constructionTarget.x, this.constructionTarget.y);
+            
+            this.constructionTarget = null;
+            this.buildProgress = 0;
+            this.state = 'idle';
         }
     }
     
@@ -193,7 +344,6 @@ class Worker extends Unit {
         );
         
         if (pheromoneTarget && pheromoneTarget.intensity > 0.3) {
-            // Нашли сильный феромонный след, идём по нему
             this.targetX = pheromoneTarget.x;
             this.targetY = pheromoneTarget.y;
             this.state = 'moving_to_resource';
@@ -225,12 +375,10 @@ class Worker extends Unit {
     
     // Движение к ресурсу
     moveToResource(deltaTime, hive, pheromoneSystem) {
-        // Оставляем феромон "дом" по пути
         this.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
         
         const dist = this.moveTowards(this.targetX, this.targetY, deltaTime);
         
-        // Проверяем, есть ли ресурс в этой точке
         const resource = window.game.gameMap.resourceManager.getResourceAt(
             Math.floor(this.targetX),
             Math.floor(this.targetY)
@@ -240,7 +388,6 @@ class Worker extends Unit {
             this.targetResource = resource;
             this.state = 'gathering';
         } else if (dist <= 1) {
-            // Достигли цели, но ресурса нет - ищем новый
             this.state = 'idle';
             this.targetResource = null;
         }
@@ -254,14 +401,12 @@ class Worker extends Unit {
             return;
         }
         
-        // Проверка, не несем ли уже ресурс
         if (this.carrying && this.carrying.amount >= this.carryCapacity) {
             this.state = 'returning';
             return;
         }
         
-        // Добыча ресурса
-        const extractAmount = 0.5; // 0.5 единицы за тик
+        const extractAmount = 0.5;
         const extracted = this.targetResource.extract(extractAmount);
         
         if (extracted > 0) {
@@ -274,7 +419,6 @@ class Worker extends Unit {
                 this.carrying.amount += extracted;
             }
             
-            // Оставляем ресурсный феромон на месте добычи
             this.depositPheromone(
                 pheromoneSystem,
                 PheromoneType.RESOURCE,
@@ -282,10 +426,9 @@ class Worker extends Unit {
                 this.targetResource.type
             );
             
-            // Если набрали полную грузоподъемность, возвращаемся
             if (this.carrying.amount >= this.carryCapacity) {
                 this.state = 'returning';
-                this.targetX = hive.x + 1; // Центр улья
+                this.targetX = hive.x + 1;
                 this.targetY = hive.y + 1;
             }
         }
@@ -293,7 +436,6 @@ class Worker extends Unit {
     
     // Возврат в улей
     returnToHive(deltaTime, hive, pheromoneSystem) {
-        // Оставляем ресурсный феромон по пути (чтобы другие шли по следу)
         if (this.carrying) {
             this.depositPheromone(
                 pheromoneSystem,
@@ -303,13 +445,12 @@ class Worker extends Unit {
             );
         }
         
-        const hiveX = hive.x + 1; // Центр улья
+        const hiveX = hive.x + 1;
         const hiveY = hive.y + 1;
         
         const dist = this.moveTowards(hiveX, hiveY, deltaTime);
         
         if (dist <= 2) {
-            // Сдать ресурс
             if (this.carrying) {
                 hive.addResource(this.carrying.type, this.carrying.amount);
                 this.carrying = null;
