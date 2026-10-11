@@ -1,13 +1,15 @@
 // Структуры улья
 
 class Structure {
-    constructor(type, x, y, hiveId) {
+    constructor(type, x, y, hiveId, color) {
         this.type = type;
         this.x = x;
         this.y = y;
         this.hiveId = hiveId;
+        this.color = color; // Цвет улья, которому принадлежит структура
         this.hp = this.getMaxHP();
         this.maxHP = this.getMaxHP();
+        this.size = this.getSize(); // Размер в тайлах
     }
     
     getMaxHP() {
@@ -18,6 +20,17 @@ class Structure {
             case 'biomass_farm': return 150;
             case 'incubator': return 120;
             default: return 100;
+        }
+    }
+    
+    getSize() {
+        switch(this.type) {
+            case 'hive': return 3;          // 3x3 тайла
+            case 'storage_solid': return 2; // 2x2 тайла
+            case 'storage_liquid': return 2;
+            case 'biomass_farm': return 3;  // 3x3 тайла
+            case 'incubator': return 2;     // 2x2 тайла
+            default: return 1;
         }
     }
     
@@ -34,18 +47,49 @@ class Structure {
     }
 }
 
-class Hive extends Structure {
-    constructor(x, y, hiveId) {
-        super('hive', x, y, hiveId);
-        this.id = hiveId;
-        this.color = this.getHiveColor(hiveId);
-        this.incubatorSlots = 6; // 6 слотов для личинок
-        this.solidStorage = 50;  // Базовое хранилище твердых ресурсов
-        this.liquidStorage = 30; // Базовое хранилище жидких ресурсов
+class HiveStructure extends Structure {
+    constructor(x, y, hiveId, color) {
+        super('hive', x, y, hiveId, color);
+        this.incubatorSlots = 6;
+        this.solidStorage = 50;
+        this.liquidStorage = 30;
+    }
+}
+
+class StorageSolid extends Structure {
+    constructor(x, y, hiveId, color) {
+        super('storage_solid', x, y, hiveId, color);
+        this.capacity = 50; // +50 к хранилищу твердых ресурсов
+    }
+}
+
+class StorageLiquid extends Structure {
+    constructor(x, y, hiveId, color) {
+        super('storage_liquid', x, y, hiveId, color);
+        this.capacity = 30; // +30 к хранилищу жидких ресурсов
+    }
+}
+
+class BiomassFarm extends Structure {
+    constructor(x, y, hiveId, color) {
+        super('biomass_farm', x, y, hiveId, color);
+        this.productionRate = 10; // 10 биомассы в минуту
+        this.lastProductionTime = Date.now();
     }
     
-    getHiveColor(id) {
-        const colors = ['#FF4444', '#44FF44', '#4444FF', '#FFFF44'];
-        return colors[id % colors.length];
+    // Произвести биомассу
+    produce() {
+        const now = Date.now();
+        const timePassed = (now - this.lastProductionTime) / 1000; // в секундах
+        const produced = (this.productionRate / 60) * timePassed; // 10 в минуту = 10/60 в секунду
+        this.lastProductionTime = now;
+        return produced;
+    }
+}
+
+class Incubator extends Structure {
+    constructor(x, y, hiveId, color) {
+        super('incubator', x, y, hiveId, color);
+        this.slots = 5; // +5 слотов для личинок
     }
 }
