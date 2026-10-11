@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alien Hive Simulation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+        }
+        
+        #gameCanvas {
+            border: 2px solid #444;
+            background-color: #0a0a0a;
+        }
+        
+        #controls {
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1>👽 Alien Hive Simulation</h1>
+    <canvas id="gameCanvas" width="1200" height="1200"></canvas>
+    <div id="controls">
+        <button id="startBtn">Start Simulation</button>
+        <button id="pauseBtn">Pause</button>
+    </div>
+    <div id="info">
+        <span id="fps">FPS: 0</span> | 
+        <span id="time">Time: 0s</span>
+    </div>
+    
+    <script src="core/utils.js"></script>
+    <script src="core/resources.js"></script>
+    <script src="core/map.js"></script>
+    <script src="entities/structures.js"></script>
+    <script src="entities/units.js"></script>
+    <script src="entities/hive.js"></script>
+    <script src="systems/pheromones.js"></script>
+    <script src="systems/ai.js"></script>
+    <script src="systems/combat.js"></script>
+    <script src="rendering/renderer.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
