@@ -6,6 +6,8 @@ class Renderer {
         this.ctx = canvas.getContext('2d');
         this.gameMap = gameMap;
         this.tileSize = gameMap.tileSize;
+        this.lastUIUpdate = 0;
+        this.uiUpdateInterval = 500; // Обновляем UI каждые 500мс
     }
     
     // Очистка canvas
@@ -19,7 +21,6 @@ class Renderer {
         this.ctx.strokeStyle = '#111111';
         this.ctx.lineWidth = 0.3;
         
-        // Рисуем сетку каждые 10 тайлов
         for (let x = 0; x <= this.gameMap.width; x += 10) {
             this.ctx.beginPath();
             this.ctx.moveTo(x * this.tileSize, 0);
@@ -45,16 +46,16 @@ class Renderer {
             let color;
             switch(resource.type) {
                 case ResourceType.BIOMASS:
-                    color = '#8B4513'; // Коричневый
+                    color = '#8B4513';
                     break;
                 case ResourceType.BIOPLASMA:
-                    color = '#00FF00'; // Зеленый
+                    color = '#00FF00';
                     break;
                 case ResourceType.CHITIN:
-                    color = '#708090'; // Серый
+                    color = '#708090';
                     break;
                 case ResourceType.NEURO_CRYSTAL:
-                    color = '#9370DB'; // Фиолетовый
+                    color = '#9370DB';
                     break;
             }
             
@@ -83,7 +84,6 @@ class Renderer {
             let color;
             switch(p.type) {
                 case PheromoneType.RESOURCE:
-                    // Цвет ресурса
                     switch(p.resourceType) {
                         case ResourceType.BIOMASS: color = '#8B4513'; break;
                         case ResourceType.BIOPLASMA: color = '#00FF00'; break;
@@ -93,14 +93,13 @@ class Renderer {
                     }
                     break;
                 case PheromoneType.DANGER:
-                    color = '#FF0000'; // Красный
+                    color = '#FF0000';
                     break;
                 case PheromoneType.HOME:
-                    color = '#00BFFF'; // Голубой
+                    color = '#00BFFF';
                     break;
             }
             
-            // Интенсивность определяет прозрачность
             this.ctx.globalAlpha = p.intensity * 0.5;
             
             this.ctx.fillStyle = color;
@@ -122,7 +121,6 @@ class Renderer {
                 const pixelPos = Utils.tileToPixel(structure.x, structure.y, this.tileSize);
                 const sizeInPixels = structure.size * this.tileSize;
                 
-                // Основной цвет структуры — цвет улья
                 this.ctx.fillStyle = structure.color;
                 this.ctx.globalAlpha = 0.6;
                 this.ctx.fillRect(
@@ -133,7 +131,6 @@ class Renderer {
                 );
                 this.ctx.globalAlpha = 1.0;
                 
-                // Обводка
                 this.ctx.strokeStyle = structure.color;
                 this.ctx.lineWidth = 1;
                 this.ctx.strokeRect(
@@ -143,7 +140,6 @@ class Renderer {
                     sizeInPixels
                 );
                 
-                // Иконка/символ внутри структуры
                 this.ctx.fillStyle = '#ffffff';
                 this.ctx.font = '10px Arial';
                 this.ctx.textAlign = 'center';
@@ -175,7 +171,6 @@ class Renderer {
                     pixelPos.y + sizeInPixels / 2
                 );
                 
-                // Полоска HP (если структура повреждена)
                 if (structure.hp < structure.maxHP) {
                     const barWidth = sizeInPixels;
                     const barHeight = 2;
@@ -200,7 +195,6 @@ class Renderer {
                 const pixelX = unit.x * this.tileSize;
                 const pixelY = unit.y * this.tileSize;
                 
-                // Размер зависит от типа юнита
                 let size;
                 switch(unit.type) {
                     case 'nurse': size = 2; break;
@@ -211,20 +205,16 @@ class Renderer {
                     default: size = 3;
                 }
                 
-                // Цвет юнита = цвет улья
                 this.ctx.fillStyle = hive.color;
                 
-                // Рисуем кружок
                 this.ctx.beginPath();
                 this.ctx.arc(pixelX, pixelY, size, 0, Math.PI * 2);
                 this.ctx.fill();
                 
-                // Тёмная обводка
                 this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
                 this.ctx.lineWidth = 0.5;
                 this.ctx.stroke();
                 
-                // Если юнит несет ресурс, показать индикатор
                 if (unit.carrying && unit.carrying.amount > 0) {
                     let resColor;
                     switch(unit.carrying.type) {
@@ -242,7 +232,6 @@ class Renderer {
                 }
             });
             
-            // Отрисовка личинок
             hive.larvae.forEach(larva => {
                 const pixelX = larva.x * this.tileSize;
                 const pixelY = larva.y * this.tileSize;
@@ -254,7 +243,6 @@ class Renderer {
                 this.ctx.fill();
                 this.ctx.globalAlpha = 1.0;
                 
-                // Прогресс-бар развития
                 const barWidth = 6;
                 const barHeight = 1;
                 const barX = pixelX - barWidth / 2;
@@ -270,13 +258,73 @@ class Renderer {
         });
     }
     
+    // Обновление UI панели со статистикой
+    updateUI(hives, currentTime) {
+        if (currentTime - this.lastUIUpdate < this.uiUpdateInterval) {
+            return;
+        }
+        this.lastUIUpdate = currentTime;
+        
+        const container = document.getElementById('hivesInfo');
+        if (!container) return;
+        
+        let html = '';
+        
+        hives.forEach(hive => {
+            // Подсчёт юнитов по типам
+            const unitCounts = {
+                queen: 0,
+                worker: 0,
+                nurse: 0,
+                scout: 0,
+                soldier: 0
+            };
+            
+            hive.units.forEach(u => {
+                if (unitCounts[u.type] !== undefined) {
+                    unitCounts[u.type]++;
+                }
+            });
+            
+            html += `
+                <div class="hive-info" style="border-left-color: ${hive.color};">
+                    <h3 style="color: ${hive.color};">Улей #${hive.id}</h3>
+                    <div class="resource-line">
+                        <span>🟤 Био Масса:</span>
+                        <span>${Math.floor(hive.resources[ResourceType.BIOMASS])} / ${hive.solidStorageCapacity}</span>
+                    </div>
+                    <div class="resource-line">
+                        <span>🟢 Био Плазма:</span>
+                        <span>${Math.floor(hive.resources[ResourceType.BIOPLASMA])} / ${hive.liquidStorageCapacity}</span>
+                    </div>
+                    <div class="resource-line">
+                        <span>⚪ Хитин:</span>
+                        <span>${Math.floor(hive.resources[ResourceType.CHITIN])} / ${hive.solidStorageCapacity}</span>
+                    </div>
+                    <div class="resource-line">
+                        <span>🟣 Нейро:</span>
+                        <span>${Math.floor(hive.resources[ResourceType.NEURO_CRYSTAL])} / ${hive.solidStorageCapacity}</span>
+                    </div>
+                    <div class="units-line">
+                        👑 ${unitCounts.queen} | 👷 ${unitCounts.worker} | 🍼 ${unitCounts.nurse} | 🔭 ${unitCounts.scout} | ⚔️ ${unitCounts.soldier} | 🥚 ${hive.larvae.length}
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
     // Полная отрисовка
     render(hives, pheromoneSystem) {
         this.clear();
         this.renderMap();
         this.renderResources();
-        this.renderPheromones(pheromoneSystem); // <-- НОВОЕ: отрисовка феромонов
+        this.renderPheromones(pheromoneSystem);
         this.renderStructures(hives);
         this.renderUnits(hives);
+        
+        // Обновляем UI
+        this.updateUI(hives, Date.now());
     }
 }
