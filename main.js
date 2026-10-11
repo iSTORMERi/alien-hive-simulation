@@ -32,6 +32,15 @@ class Game {
         // Инициализация
         this.initializeHives();
         
+        // Генерация ресурсов по карте
+        const hivePositions = [
+            { x: 5, y: 5 },
+            { x: this.mapWidth - 8, y: 5 },
+            { x: 5, y: this.mapHeight - 8 },
+            { x: this.mapWidth - 8, y: this.mapHeight - 8 }
+        ];
+        this.gameMap.generateResources(hivePositions);
+        
         // Обработчики кнопок
         document.getElementById('startBtn').addEventListener('click', () => this.start());
         document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
@@ -115,13 +124,8 @@ class Game {
     
     // Обновление логики игры
     update(deltaTime, currentTime) {
-        // Обновление карты
         this.gameMap.update();
-        
-        // Обновление системы феромонов
         this.pheromoneSystem.update(deltaTime);
-        
-        // Обновление ульев
         this.hives.forEach(hive => hive.update(deltaTime, currentTime, this.pheromoneSystem));
     }
 }
