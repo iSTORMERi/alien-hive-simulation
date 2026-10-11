@@ -188,6 +188,55 @@ class Renderer {
         });
     }
     
+    // Отрисовка строящихся структур
+    renderConstructionSites(hives) {
+        hives.forEach(hive => {
+            hive.units.forEach(unit => {
+                if (unit.type === 'worker' && unit.state === 'building' && unit.constructionTarget) {
+                    const structure = unit.constructionTarget;
+                    const pixelPos = Utils.tileToPixel(structure.x, structure.y, this.tileSize);
+                    const sizeInPixels = structure.size * this.tileSize;
+                    
+                    // Полупрозрачная структура
+                    this.ctx.fillStyle = structure.color;
+                    this.ctx.globalAlpha = 0.3;
+                    this.ctx.fillRect(
+                        pixelPos.x,
+                        pixelPos.y,
+                        sizeInPixels,
+                        sizeInPixels
+                    );
+                    this.ctx.globalAlpha = 1.0;
+                    
+                    // Обводка пунктиром
+                    this.ctx.strokeStyle = structure.color;
+                    this.ctx.lineWidth = 2;
+                    this.ctx.setLineDash([5, 5]);
+                    this.ctx.strokeRect(
+                        pixelPos.x,
+                        pixelPos.y,
+                        sizeInPixels,
+                        sizeInPixels
+                    );
+                    this.ctx.setLineDash([]);
+                    
+                    // Прогресс-бар строительства
+                    const barWidth = sizeInPixels;
+                    const barHeight = 3;
+                    const barX = pixelPos.x;
+                    const barY = pixelPos.y - 6;
+                    const progress = unit.buildProgress / unit.buildRequired;
+                    
+                    this.ctx.fillStyle = '#333333';
+                    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+                    
+                    this.ctx.fillStyle = '#FFA500'; // Оранжевый
+                    this.ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+                }
+            });
+        });
+    }
+    
     // Отрисовка юнитов
     renderUnits(hives) {
         hives.forEach(hive => {
@@ -322,9 +371,9 @@ class Renderer {
         this.renderResources();
         this.renderPheromones(pheromoneSystem);
         this.renderStructures(hives);
+        this.renderConstructionSites(hives);
         this.renderUnits(hives);
         
-        // Обновляем UI
         this.updateUI(hives, Date.now());
     }
 }
