@@ -2,14 +2,12 @@
 
 class CombatSystem {
     constructor() {
-        this.attackCooldown = 1000; // 1 секунда между атаками
-        this.visionRange = 10; // Радиус видимости для обнаружения врагов
-        this.nurseVisionRange = 5; // У нянек радиус меньше
+        this.attackCooldown = 1000;
+        this.visionRange = 10;
+        this.nurseVisionRange = 5;
     }
     
-    // Обновление боевой системы
     update(deltaTime, hives, pheromoneSystem) {
-        // Обрабатываем атаки всех юнитов
         hives.forEach(hive => {
             hive.units.forEach(unit => {
                 if (unit.isDead()) return;
@@ -34,23 +32,21 @@ class CombatSystem {
             });
         });
         
-        // Обрабатываем смерти
         this.handleDeaths(hives, pheromoneSystem);
     }
     
-    // Найти ближайшего врага
+    // Найти ближайшего врага (ВСЕХ - включая рабочих)
     findNearestEnemy(unit, hive, hives, maxDistance = null) {
         if (maxDistance === null) {
-            maxDistance = unit.type === 'nurse' ? this.nurseVisionRange : this.visionRange;
+            maxDistance = this.visionRange;
         }
         
         let nearestEnemy = null;
         let nearestDistance = Infinity;
         
         hives.forEach(otherHive => {
-            if (otherHive.id === hive.id) return; // Не считаем своих
+            if (otherHive.id === hive.id) return;
             
-            // Проверяем юнитов
             otherHive.units.forEach(enemy => {
                 if (enemy.isDead()) return;
                 
@@ -61,7 +57,6 @@ class CombatSystem {
                 }
             });
             
-            // Проверяем структуры
             otherHive.structures.forEach(structure => {
                 if (structure.isDestroyed()) return;
                 
@@ -81,36 +76,29 @@ class CombatSystem {
     
     // Обновление солдата
     updateSoldier(unit, hive, hives, deltaTime, pheromoneSystem) {
-        // Проверяем, есть ли враг рядом
         const enemy = this.findNearestEnemy(unit, hive, hives);
         
         if (enemy) {
-            // Нашли врага - атакуем
             unit.state = 'attacking';
             unit.target = enemy;
             
-            // Двигаемся к врагу
             const enemyX = enemy.x !== undefined ? enemy.x : enemy.x + enemy.size / 2;
             const enemyY = enemy.y !== undefined ? enemy.y : enemy.y + enemy.size / 2;
             
             const dist = unit.moveTowards(enemyX, enemyY, deltaTime);
             
-            // Если достаточно близко - атакуем
             if (dist <= 1.5) {
                 this.tryAttack(unit, enemy, pheromoneSystem);
             }
         } else {
-            // Врагов нет - проверяем феромоны тревоги
             const dangerPheromone = pheromoneSystem.findNearestDangerPheromone(
                 unit.x, unit.y, unit.hiveId
             );
             
             if (dangerPheromone && dangerPheromone.intensity > 0.3) {
-                // Идём к месту тревоги
                 unit.state = 'patrolling';
                 unit.moveTowards(dangerPheromone.x, dangerPheromone.y, deltaTime);
             } else {
-                // Патрулируем
                 unit.state = 'guarding';
                 if (!unit.patrolTarget) {
                     const angle = Utils.random(0, Math.PI * 2);
@@ -133,34 +121,29 @@ class CombatSystem {
     
     // Обновление разведчика
     updateScout(unit, hive, hives, deltaTime, pheromoneSystem) {
-        // Разведчики избегают боя!
+        // Разведчики убегают от ВСЕХ врагов
         const enemy = this.findNearestEnemy(unit, hive, hives);
         
         if (enemy) {
-            // Убегаем от врага!
             unit.state = 'fleeing';
             
             const enemyX = enemy.x !== undefined ? enemy.x : enemy.x + enemy.size / 2;
             const enemyY = enemy.y !== undefined ? enemy.y : enemy.y + enemy.size / 2;
             
-            // Направление от врага
             const dx = unit.x - enemyX;
             const dy = unit.y - enemyY;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             if (dist > 0) {
-                // Убегаем в противоположную сторону
                 const fleeX = unit.x + (dx / dist) * 10;
                 const fleeY = unit.y + (dy / dist) * 10;
                 
-                // Ограничиваем границами карты
                 const targetX = Math.max(1, Math.min(window.game.mapWidth - 1, fleeX));
                 const targetY = Math.max(1, Math.min(window.game.mapHeight - 1, fleeY));
                 
                 unit.moveTowards(targetX, targetY, deltaTime);
             }
             
-            // Оставляем феромон тревоги!
             pheromoneSystem.depositPheromone(
                 PheromoneType.DANGER,
                 unit.x,
@@ -172,15 +155,12 @@ class CombatSystem {
             return;
         }
         
-        // Если не убегаем - обычное поведение разведчика
         switch(unit.state) {
             case 'fleeing':
-                // Если убежали достаточно далеко, возвращаемся к исследованию
                 const closestEnemy = this.findNearestEnemy(unit, hive, hives, 15);
                 if (!closestEnemy) {
                     unit.state = 'exploring';
                 } else {
-                    // Продолжаем убегать
                     const enemyX = closestEnemy.x !== undefined ? closestEnemy.x : closestEnemy.x + closestEnemy.size / 2;
                     const enemyY = closestEnemy.y !== undefined ? closestEnemy.y : closestEnemy.y + closestEnemy.size / 2;
                     const dx = unit.x - enemyX;
@@ -208,7 +188,6 @@ class CombatSystem {
                     unit.exploreTarget = null;
                 }
                 
-                // Если нашли ресурс, оставляем феромон
                 const resource = window.game.gameMap.resourceManager.getResourceAt(
                     Math.floor(unit.x),
                     Math.floor(unit.y)
@@ -234,36 +213,32 @@ class CombatSystem {
         }
     }
     
-    // Обновление рабочего
+    // Обновление рабочего - ПРАВИЛЬНЫЕ ПРИОРИТЕТЫ
     updateWorker(unit, hive, hives, deltaTime, pheromoneSystem) {
-        // Рабочие не ищут бой, но если враг очень близко - защищаются
-        const enemy = this.findNearestEnemy(unit, hive, hives, 3); // Малый радиус
+        // ⭐ ПРИОРИТЕТЫ РАБОЧЕГО:
+        // 1. Если несёт ресурс (returning) - НЕ УБЕГАЕТ, продолжает нести
+        // 2. Если добывает ресурс (gathering) - НЕ УБЕГАЕТ, продолжает добычу
+        // 3. Если строит (building) - НЕ УБЕГАЕТ, продолжает строить
+        // 4. Если свободен (idle, moving_to_resource) - может убежать от врага
         
-        if (enemy) {
-            // Враг очень близко - либо убегаем, либо атакуем (если нет солдат)
-            const soldiersNearby = hive.units.filter(u => u.type === 'soldier' && !u.isDead() && 
-                Utils.distance(u.x, u.y, unit.x, unit.y) < 10).length;
+        const isBusy = (unit.state === 'returning' || 
+                        unit.state === 'gathering' || 
+                        unit.state === 'building');
+        
+        // Проверяем врага только если не занят критической работой
+        if (!isBusy) {
+            const enemy = this.findNearestEnemy(unit, hive, hives, 5);
             
-            if (soldiersNearby === 0 && Math.random() < 0.5) {
-                // Нет солдат рядом - атакуем в отчаянии
-                unit.state = 'attacking';
-                unit.target = enemy;
+            if (enemy) {
+                unit.state = 'fleeing';
                 
                 const enemyX = enemy.x !== undefined ? enemy.x : enemy.x + enemy.size / 2;
                 const enemyY = enemy.y !== undefined ? enemy.y : enemy.y + enemy.size / 2;
                 
-                const dist = unit.moveTowards(enemyX, enemyY, deltaTime);
-                if (dist <= 1.5) {
-                    this.tryAttack(unit, enemy, pheromoneSystem);
-                }
-            } else {
-                // Убегаем к улью
-                unit.state = 'fleeing';
                 const hiveX = hive.x + 1;
                 const hiveY = hive.y + 1;
                 unit.moveTowards(hiveX, hiveY, deltaTime);
                 
-                // Оставляем феромон тревоги
                 pheromoneSystem.depositPheromone(
                     PheromoneType.DANGER,
                     unit.x,
@@ -271,75 +246,171 @@ class CombatSystem {
                     0.5,
                     unit.hiveId
                 );
+                return;
             }
-            return;
         }
         
-        // Если не в бою - обычное поведение рабочего
+        // Обычное поведение рабочего
         switch(unit.state) {
             case 'fleeing':
-                // Если убежали, возвращаемся к работе
-                const closestEnemy = this.findNearestEnemy(unit, hive, hives, 8);
+                const closestEnemy = this.findNearestEnemy(unit, hive, hives, 10);
                 if (!closestEnemy) {
                     unit.state = 'idle';
+                    unit.targetResource = null;
                 } else {
                     const hiveX = hive.x + 1;
                     const hiveY = hive.y + 1;
                     unit.moveTowards(hiveX, hiveY, deltaTime);
                 }
                 break;
-            case 'attacking':
-                // Если цель мертва, возвращаемся к работе
-                if (unit.target && unit.target.isDead && unit.target.isDead()) {
-                    unit.state = 'idle';
-                    unit.target = null;
-                } else if (unit.target) {
-                    const enemyX = unit.target.x !== undefined ? unit.target.x : unit.target.x + unit.target.size / 2;
-                    const enemyY = unit.target.y !== undefined ? unit.target.y : unit.target.y + unit.target.size / 2;
-                    const dist = unit.moveTowards(enemyX, enemyY, deltaTime);
-                    if (dist <= 1.5) {
-                        this.tryAttack(unit, unit.target, pheromoneSystem);
-                    }
-                } else {
-                    unit.state = 'idle';
-                }
-                break;
+                
             case 'idle':
-                this.workerDecideAction(unit, hive, pheromoneSystem);
+                this.workerFindResource(unit, hive, pheromoneSystem);
                 break;
+                
             case 'moving_to_resource':
                 this.workerMoveToResource(unit, hive, pheromoneSystem, deltaTime);
                 break;
+                
             case 'gathering':
                 this.workerGatherResource(unit, hive, pheromoneSystem, deltaTime);
                 break;
+                
             case 'returning':
                 this.workerReturnToHive(unit, hive, pheromoneSystem, deltaTime);
                 break;
+                
             case 'moving_to_build':
                 this.workerMoveToConstruction(unit, hive, pheromoneSystem, deltaTime);
                 break;
+                
             case 'building':
                 this.workerBuild(unit, hive, pheromoneSystem, deltaTime);
                 break;
         }
     }
     
-    // Рабочий решает, что делать
-    workerDecideAction(unit, hive, pheromoneSystem) {
-        // Приоритет 1: Строительство
-        const constructionPriority = hive.getConstructionPriority();
-        if (constructionPriority && Math.random() < 0.3) {
-            if (this.workerTryToStartConstruction(unit, hive)) {
-                return;
-            }
+    workerFindResource(unit, hive, pheromoneSystem) {
+        const pheromoneTarget = pheromoneSystem.findNearestResourcePheromone(
+            unit.x, unit.y, unit.hiveId, null
+        );
+        
+        if (pheromoneTarget && pheromoneTarget.intensity > 0.4) {
+            unit.targetX = pheromoneTarget.x;
+            unit.targetY = pheromoneTarget.y;
+            unit.state = 'moving_to_resource';
+            unit.targetResource = null;
+            return;
         }
         
-        // Приоритет 2: Поиск ресурсов
-        this.workerFindResource(unit, hive, pheromoneSystem);
+        const resources = window.game.gameMap.getAllResources();
+        let closest = null;
+        let closestDist = Infinity;
+        
+        resources.forEach(resource => {
+            if (resource.hasResource()) {
+                const dist = Utils.distance(unit.x, unit.y, resource.x, resource.y);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closest = resource;
+                }
+            }
+        });
+        
+        if (closest) {
+            unit.targetResource = closest;
+            unit.targetX = closest.x;
+            unit.targetY = closest.y;
+            unit.state = 'moving_to_resource';
+        }
     }
     
-    // Рабочий пытается начать строительство
+    workerMoveToResource(unit, deltaTime, hive, pheromoneSystem) {
+        unit.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
+        
+        const dist = unit.moveTowards(unit.targetX, unit.targetY, deltaTime);
+        
+        const resource = window.game.gameMap.resourceManager.getResourceAt(
+            Math.floor(unit.targetX),
+            Math.floor(unit.targetY)
+        );
+        
+        if (resource && resource.hasResource()) {
+            unit.targetResource = resource;
+            unit.state = 'gathering';
+        } else if (dist <= 1) {
+            unit.state = 'idle';
+            unit.targetResource = null;
+        }
+    }
+    
+    workerGatherResource(unit, deltaTime, hive, pheromoneSystem) {
+        if (!unit.targetResource || !unit.targetResource.hasResource()) {
+            unit.state = 'idle';
+            unit.targetResource = null;
+            return;
+        }
+        
+        if (unit.carrying && unit.carrying.amount >= unit.carryCapacity) {
+            unit.state = 'returning';
+            unit.targetX = hive.x + 1;
+            unit.targetY = hive.y + 1;
+            return;
+        }
+        
+        const extractAmount = 0.5;
+        const extracted = unit.targetResource.extract(extractAmount);
+        
+        if (extracted > 0) {
+            if (!unit.carrying) {
+                unit.carrying = {
+                    type: unit.targetResource.type,
+                    amount: extracted
+                };
+            } else {
+                unit.carrying.amount += extracted;
+            }
+            
+            unit.depositPheromone(
+                pheromoneSystem,
+                PheromoneType.RESOURCE,
+                0.3,
+                unit.targetResource.type
+            );
+            
+            if (unit.carrying.amount >= unit.carryCapacity) {
+                unit.state = 'returning';
+                unit.targetX = hive.x + 1;
+                unit.targetY = hive.y + 1;
+            }
+        }
+    }
+    
+    workerReturnToHive(unit, deltaTime, hive, pheromoneSystem) {
+        if (unit.carrying) {
+            unit.depositPheromone(
+                pheromoneSystem,
+                PheromoneType.RESOURCE,
+                0.4,
+                unit.carrying.type
+            );
+        }
+        
+        const hiveX = hive.x + 1;
+        const hiveY = hive.y + 1;
+        
+        const dist = unit.moveTowards(hiveX, hiveY, deltaTime);
+        
+        if (dist <= 2) {
+            if (unit.carrying) {
+                hive.addResource(unit.carrying.type, unit.carrying.amount);
+                unit.carrying = null;
+            }
+            unit.state = 'idle';
+            unit.targetResource = null;
+        }
+    }
+    
     workerTryToStartConstruction(unit, hive) {
         const priority = hive.getConstructionPriority();
         if (!priority) return false;
@@ -457,130 +528,11 @@ class CombatSystem {
         }
     }
     
-    workerFindResource(unit, hive, pheromoneSystem) {
-        const pheromoneTarget = pheromoneSystem.findNearestResourcePheromone(
-            unit.x, unit.y, unit.hiveId, null
-        );
-        
-        if (pheromoneTarget && pheromoneTarget.intensity > 0.3) {
-            unit.targetX = pheromoneTarget.x;
-            unit.targetY = pheromoneTarget.y;
-            unit.state = 'moving_to_resource';
-            return;
-        }
-        
-        const resources = window.game.gameMap.getAllResources();
-        let closest = null;
-        let closestDist = Infinity;
-        
-        resources.forEach(resource => {
-            if (resource.hasResource()) {
-                const dist = Utils.distance(unit.x, unit.y, resource.x, resource.y);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closest = resource;
-                }
-            }
-        });
-        
-        if (closest) {
-            unit.targetResource = closest;
-            unit.targetX = closest.x;
-            unit.targetY = closest.y;
-            unit.state = 'moving_to_resource';
-        }
-    }
-    
-    workerMoveToResource(unit, deltaTime, hive, pheromoneSystem) {
-        unit.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
-        
-        const dist = unit.moveTowards(unit.targetX, unit.targetY, deltaTime);
-        
-        const resource = window.game.gameMap.resourceManager.getResourceAt(
-            Math.floor(unit.targetX),
-            Math.floor(unit.targetY)
-        );
-        
-        if (resource && resource.hasResource()) {
-            unit.targetResource = resource;
-            unit.state = 'gathering';
-        } else if (dist <= 1) {
-            unit.state = 'idle';
-            unit.targetResource = null;
-        }
-    }
-    
-    workerGatherResource(unit, deltaTime, hive, pheromoneSystem) {
-        if (!unit.targetResource || !unit.targetResource.hasResource()) {
-            unit.state = 'idle';
-            unit.targetResource = null;
-            return;
-        }
-        
-        if (unit.carrying && unit.carrying.amount >= unit.carryCapacity) {
-            unit.state = 'returning';
-            return;
-        }
-        
-        const extractAmount = 0.5;
-        const extracted = unit.targetResource.extract(extractAmount);
-        
-        if (extracted > 0) {
-            if (!unit.carrying) {
-                unit.carrying = {
-                    type: unit.targetResource.type,
-                    amount: extracted
-                };
-            } else {
-                unit.carrying.amount += extracted;
-            }
-            
-            unit.depositPheromone(
-                pheromoneSystem,
-                PheromoneType.RESOURCE,
-                0.2,
-                unit.targetResource.type
-            );
-            
-            if (unit.carrying.amount >= unit.carryCapacity) {
-                unit.state = 'returning';
-                unit.targetX = hive.x + 1;
-                unit.targetY = hive.y + 1;
-            }
-        }
-    }
-    
-    workerReturnToHive(unit, deltaTime, hive, pheromoneSystem) {
-        if (unit.carrying) {
-            unit.depositPheromone(
-                pheromoneSystem,
-                PheromoneType.RESOURCE,
-                0.3,
-                unit.carrying.type
-            );
-        }
-        
-        const hiveX = hive.x + 1;
-        const hiveY = hive.y + 1;
-        
-        const dist = unit.moveTowards(hiveX, hiveY, deltaTime);
-        
-        if (dist <= 2) {
-            if (unit.carrying) {
-                hive.addResource(unit.carrying.type, unit.carrying.amount);
-                unit.carrying = null;
-            }
-            unit.state = 'idle';
-        }
-    }
-    
-    // Обновление няньки
     updateNurse(unit, hive, hives, deltaTime, pheromoneSystem) {
-        // Няньки остаются в гнезде, но защищаются если враг очень близко
         const enemy = this.findNearestEnemy(unit, hive, hives, 3);
         
         if (enemy) {
-            unit.state = 'attacking';
+            unit.state = 'defending';
             unit.target = enemy;
             
             const enemyX = enemy.x !== undefined ? enemy.x : enemy.x + enemy.size / 2;
@@ -592,13 +544,10 @@ class CombatSystem {
             }
         } else {
             unit.state = 'nursing';
-            // Няньки кормят личинок - это уже обрабатывается в hive.js
         }
     }
     
-    // Обновление королевы
     updateQueen(unit, hive, hives, deltaTime, pheromoneSystem) {
-        // Королева не двигается, но защищается
         const enemy = this.findNearestEnemy(unit, hive, hives, 2);
         
         if (enemy) {
@@ -617,7 +566,6 @@ class CombatSystem {
         }
     }
     
-    // Попытка атаки
     tryAttack(attacker, target, pheromoneSystem) {
         const currentTime = Date.now();
         
@@ -629,11 +577,9 @@ class CombatSystem {
             return;
         }
         
-        // Наносим урон
         target.takeDamage(attacker.damage);
         attacker.lastAttackTime = currentTime;
         
-        // Оставляем феромон тревоги на месте боя
         pheromoneSystem.depositPheromone(
             PheromoneType.DANGER,
             attacker.x,
@@ -643,48 +589,38 @@ class CombatSystem {
         );
     }
     
-    // Обработка смертей
     handleDeaths(hives, pheromoneSystem) {
         hives.forEach(hive => {
-            // Обрабатываем смерти юнитов
             const deadUnits = hive.units.filter(u => u.isDead());
             
             deadUnits.forEach(deadUnit => {
-                // Создаём биомассу на месте смерти
                 this.spawnBiomassOnDeath(deadUnit.x, deadUnit.y);
             });
             
-            // Удаляем мёртвых юнитов
             hive.units = hive.units.filter(u => !u.isDead());
             
-            // Проверяем смерть структур
             const destroyedStructures = hive.structures.filter(s => s.isDestroyed());
             
             destroyedStructures.forEach(structure => {
-                // Создаём биомассу на месте разрушенной структуры
                 this.spawnBiomassOnDeath(
                     structure.x + structure.size / 2,
                     structure.y + structure.size / 2,
-                    structure.maxHP / 10 // Больше HP = больше биомассы
+                    structure.maxHP / 10
                 );
             });
             
-            // Удаляем разрушенные структуры из карты
             destroyedStructures.forEach(structure => {
                 window.game.gameMap.removeStructure(structure);
             });
             
-            // Удаляем разрушенные структуры из улья
             hive.structures = hive.structures.filter(s => !s.isDestroyed());
         });
     }
     
-    // Создать биомассу на месте смерти
     spawnBiomassOnDeath(x, y, amount = 5) {
         const tileX = Math.floor(x);
         const tileY = Math.floor(y);
         
-        // Проверяем, свободен ли тайл
         const tile = window.game.gameMap.getTile(tileX, tileY);
         if (tile && !tile.resource) {
             window.game.gameMap.addResource(
@@ -697,7 +633,6 @@ class CombatSystem {
             return;
         }
         
-        // Если тайл занят, ищем соседний свободный
         const neighbors = [
             { dx: 1, dy: 0 },
             { dx: -1, dy: 0 },
