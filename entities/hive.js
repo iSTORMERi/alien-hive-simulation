@@ -42,13 +42,11 @@ class HiveManager {
     // Добавить ресурс
     addResource(type, amount) {
         if (type === ResourceType.BIOPLASMA) {
-            // Жидкий ресурс
             const space = this.liquidStorageCapacity - this.resources[type];
             const toAdd = Math.min(amount, space);
             this.resources[type] += toAdd;
             return toAdd;
         } else {
-            // Твердый ресурс
             const space = this.solidStorageCapacity - this.resources[type];
             const toAdd = Math.min(amount, space);
             this.resources[type] += toAdd;
@@ -82,29 +80,24 @@ class HiveManager {
     
     // Отложить яйцо
     layEgg(currentTime) {
-        // Проверка кулдауна
         if (currentTime - this.lastEggTime < this.eggCooldown) {
             return false;
         }
         
-        // Проверка лимита юнитов
         if (this.units.length >= this.unitLimit) {
             return false;
         }
         
-        // Проверка наличия свободных слотов для личинок
         const totalLarvaeSlots = this.getTotalLarvaeSlots();
         if (this.larvae.length >= totalLarvaeSlots) {
             return false;
         }
         
-        // Проверка ресурсов для яйца (нужна биомасса)
-        const eggCost = 2; // 2 биомассы на яйцо
+        const eggCost = 2;
         if (!this.spendResource(ResourceType.BIOMASS, eggCost)) {
             return false;
         }
         
-        // Создание личинки
         const larva = new Larva(this.x + 1, this.y + 1, this.id);
         this.larvae.push(larva);
         this.lastEggTime = currentTime;
@@ -114,12 +107,11 @@ class HiveManager {
     
     // Получить общее количество слотов для личинок
     getTotalLarvaeSlots() {
-        let slots = 6; // Базовые слоты в улье
+        let slots = 6;
         
-        // Добавить слоты из инкубаторов
         this.structures.forEach(structure => {
             if (structure.type === 'incubator') {
-                slots += 5; // Каждый инкубатор дает 5 слотов
+                slots += 5;
             }
         });
         
@@ -128,7 +120,7 @@ class HiveManager {
     
     // Получить общую емкость хранилищ
     getTotalStorageCapacity() {
-        let solidCapacity = 50; // Базовая емкость улья
+        let solidCapacity = 50;
         let liquidCapacity = 30;
         
         this.structures.forEach(structure => {
@@ -153,21 +145,6 @@ class HiveManager {
     getConstructionPriority() {
         const storage = this.getTotalStorageCapacity();
         
-        // Подсчёт юнитов
-        const unitCounts = {
-            worker: 0,
-            nurse: 0,
-            scout: 0,
-            soldier: 0
-        };
-        
-        this.units.forEach(u => {
-            if (unitCounts[u.type] !== undefined) {
-                unitCounts[u.type]++;
-            }
-        });
-        
-        // Приоритет 1: Хранилища (если заполнены больше чем на 80%)
         const biomassFull = this.resources[ResourceType.BIOMASS] / storage.solid > 0.8;
         const bioplasmaFull = this.resources[ResourceType.BIOPLASMA] / storage.liquid > 0.8;
         
@@ -179,7 +156,6 @@ class HiveManager {
             return { type: 'storage_liquid', priority: 1 };
         }
         
-        // Приоритет 2: Инкубаторы (если мало слотов для личинок)
         const totalSlots = this.getTotalLarvaeSlots();
         const freeSlots = totalSlots - this.larvae.length;
         
@@ -187,7 +163,6 @@ class HiveManager {
             return { type: 'incubator', priority: 2 };
         }
         
-        // Приоритет 3: Фермы биомассы (если мало еды)
         if (this.resources[ResourceType.BIOMASS] < 20 && this.resources[ResourceType.BIOMASS] >= 70 && this.resources[ResourceType.CHITIN] >= 10) {
             return { type: 'biomass_farm', priority: 3 };
         }
@@ -227,13 +202,11 @@ class HiveManager {
         this.larvae.forEach(larva => {
             larva.update(deltaTime, this);
             
-            // Если личинка созрела, создать юнита
             if (larva.isReady()) {
                 this.hatchLarva(larva);
             }
         });
         
-        // Удалить мертвых личинок
         this.larvae = this.larvae.filter(l => !l.isDead());
     }
     
@@ -241,30 +214,23 @@ class HiveManager {
     hatchLarva(larva) {
         let unit = null;
         
-        // Спавн рядом с ульём (случайное смещение)
         const spawnX = this.x + 1 + Utils.random(-2, 2);
         const spawnY = this.y + 1 + Utils.random(-2, 2);
         
-        // Определить тип юнита на основе ресурсов, которыми кормили личинку
         const fedResources = larva.getFedResources();
         
         if (fedResources[ResourceType.BIOPLASMA] >= 5 && fedResources[ResourceType.CHITIN] >= 2) {
-            // Солдат: 5 Био Плазма + 2 Хитина
             unit = new Soldier(spawnX, spawnY, this.id);
         } else if (fedResources[ResourceType.BIOPLASMA] >= 5) {
-            // Разведчик: 5 Био Плазма
             unit = new Scout(spawnX, spawnY, this.id);
         } else if (fedResources[ResourceType.BIOPLASMA] >= 2 && fedResources[ResourceType.BIOMASS] >= 1) {
-            // Нянька: 2 Био Плазма + 1 Био Масса
             unit = new Nurse(spawnX, spawnY, this.id);
         } else {
-            // Рабочий: 3 Био Плазма (по умолчанию)
             unit = new Worker(spawnX, spawnY, this.id);
         }
         
         this.addUnit(unit);
         
-        // Удалить личинку
         const index = this.larvae.indexOf(larva);
         if (index > -1) {
             this.larvae.splice(index, 1);
@@ -273,17 +239,14 @@ class HiveManager {
     
     // Обновление улья
     update(deltaTime, currentTime, pheromoneSystem) {
-        // Откладка яиц (первые 6 рабочих)
         if (this.initialEggsLaid < this.maxInitialEggs) {
             if (this.layEgg(currentTime)) {
                 this.initialEggsLaid++;
             }
         }
         
-        // Обновление личинок
         this.updateLarvae(deltaTime);
         
-        // Производство ферм биомассы
         this.structures.forEach(structure => {
             if (structure.type === 'biomass_farm') {
                 const produced = structure.produce();
@@ -291,14 +254,12 @@ class HiveManager {
             }
         });
         
-        // Обновление юнитов
         this.units.forEach(unit => {
             if (!unit.isDead()) {
                 unit.update(deltaTime, this, pheromoneSystem);
             }
         });
         
-        // Удалить мертвых юнитов
         this.units = this.units.filter(u => !u.isDead());
     }
 }
@@ -322,13 +283,16 @@ class Larva {
         
         // Таймеры
         this.lastFeedTime = 0;
-        this.feedCooldown = 180000; // 3 минуты (180 секунд)
+        this.feedCooldown = 180000; // 3 минуты
+        this.lastBioplasmaFeedTime = 0;
+        this.bioplasmaFeedCooldown = 60000; // 1 минута между порциями плазмы
+        
         this.starvationTimer = 0;
-        this.maxStarvationTime = 180000; // 3 минуты до смерти от голода
+        this.maxStarvationTime = 180000;
         
         // Прогресс развития
         this.developmentProgress = 0;
-        this.requiredDevelopment = 100; // 100% для созревания
+        this.requiredDevelopment = 100;
     }
     
     // Покормить личинку
@@ -337,55 +301,61 @@ class Larva {
         this.lastFeedTime = Date.now();
         this.starvationTimer = 0;
         
-        // Увеличить прогресс развития
+        // Био плазма ускоряет развитие
         if (resourceType === ResourceType.BIOPLASMA) {
-            this.developmentProgress += amount * 10; // Каждая единица плазмы дает 10% прогресса
+            this.developmentProgress += amount * 20; // 20% за единицу плазмы
+            this.lastBioplasmaFeedTime = Date.now();
+        }
+        
+        // Био масса тоже немного помогает развитию
+        if (resourceType === ResourceType.BIOMASS) {
+            this.developmentProgress += amount * 2; // 2% за единицу биомассы
         }
     }
     
-    // Получить ресурсы, которыми кормили
     getFedResources() {
         return this.fedResources;
     }
     
-    // Проверка, созрела ли личинка
     isReady() {
         return this.developmentProgress >= this.requiredDevelopment;
     }
     
-    // Обновление личинки
     update(deltaTime, hive) {
         const currentTime = Date.now();
         
-        // Проверка голода
+        // Проверка голода (биомасса нужна для выживания)
         if (currentTime - this.lastFeedTime > this.feedCooldown) {
             this.starvationTimer += deltaTime * 1000;
             
-            // Смерть от голода
             if (this.starvationTimer >= this.maxStarvationTime) {
                 this.hp = 0;
             }
         }
         
-        // Кормление личинки (если есть няньки или рабочие)
+        // Кормление личинки
         this.tryToFeed(hive, currentTime);
     }
     
     // Попытка покормить личинку
     tryToFeed(hive, currentTime) {
-        // Проверка кулдауна
-        if (currentTime - this.lastFeedTime < this.feedCooldown) {
-            return;
+        // 1. Кормление биомассой (для выживания) - раз в 3 минуты
+        if (currentTime - this.lastFeedTime >= this.feedCooldown) {
+            if (hive.resources[ResourceType.BIOMASS] >= 1) {
+                hive.spendResource(ResourceType.BIOMASS, 1);
+                this.feed(ResourceType.BIOMASS, 1);
+            }
         }
         
-        // Нужно 1 биомасса каждые 3 минуты
-        if (hive.resources[ResourceType.BIOMASS] >= 1) {
-            hive.spendResource(ResourceType.BIOMASS, 1);
-            this.feed(ResourceType.BIOMASS, 1);
+        // 2. Кормление био плазмой (для развития) - раз в минуту
+        if (currentTime - this.lastBioplasmaFeedTime >= this.bioplasmaFeedCooldown) {
+            if (hive.resources[ResourceType.BIOPLASMA] >= 1) {
+                hive.spendResource(ResourceType.BIOPLASMA, 1);
+                this.feed(ResourceType.BIOPLASMA, 1);
+            }
         }
     }
     
-    // Проверка, мертва ли личинка
     isDead() {
         return this.hp <= 0;
     }
