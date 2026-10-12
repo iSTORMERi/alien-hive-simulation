@@ -29,17 +29,19 @@ class HiveManager {
         // Личинки
         this.larvae = [];
         
-        // Лимит юнитов (увеличивается Нейро Кристаллами)
+        // Лимит юнитов
         this.unitLimit = 50;
+        
+        // Счётчик вылупившихся юнитов
+        this.totalHatched = 0;
         
         // Таймеры
         this.lastEggTime = 0;
-        this.eggCooldown = 3000; // 3 секунды между яйцами
+        this.eggCooldown = 3000;
         this.initialEggsLaid = 0;
-        this.maxInitialEggs = 6; // Первые 6 рабочих
+        this.maxInitialEggs = 6;
     }
     
-    // Добавить ресурс
     addResource(type, amount) {
         if (type === ResourceType.BIOPLASMA) {
             const space = this.liquidStorageCapacity - this.resources[type];
@@ -54,7 +56,6 @@ class HiveManager {
         }
     }
     
-    // Потратить ресурс
     spendResource(type, amount) {
         if (this.resources[type] >= amount) {
             this.resources[type] -= amount;
@@ -63,7 +64,6 @@ class HiveManager {
         return false;
     }
     
-    // Добавить юнита
     addUnit(unit) {
         if (this.units.length < this.unitLimit) {
             this.units.push(unit);
@@ -72,13 +72,131 @@ class HiveManager {
         return false;
     }
     
-    // Создать королеву
     createQueen() {
         this.queen = new Queen(this.x + 1, this.y + 1, this.id);
         this.units.push(this.queen);
     }
     
-    // Отложить яйцо
+    // ⭐ НОВОЕ: Проверка, можем ли мы позволить себе юнита определённой касты
+    canAffordUnit(casteType) {
+        switch(casteType) {
+            case 'worker':
+                return this.resources[ResourceType.BIOPLASMA] >= 3;
+            case 'nurse':
+                return this.resources[ResourceType.BIOPLASMA] >= 2;
+            case 'scout':
+                return this.resources[ResourceType.BIOPLASMA] >= 5;
+            case 'soldier':
+                return this.resources[ResourceType.BIOPLASMA] >= 5 && 
+                       this.resources[ResourceType.CHITIN] >= 2;
+        }
+        return false;
+    }
+    
+    // ⭐ НОВОЕ: Получить стоимость касты (для информации)
+    getUnitCost(casteType) {
+        switch(casteType) {
+            case 'worker':
+                return { [ResourceType.BIOPLASMA]: 3 };
+            case 'nurse':
+                return { [ResourceType.BIOPLASMA]: 2 };
+            case 'scout':
+                return { [ResourceType.BIOPLASMA]: 5 };
+            case 'soldier':
+                return { [ResourceType.BIOPLASMA]: 5, [ResourceType.CHITIN]: 2 };
+        }
+        return {};
+    }
+    
+    // ⭐ НОВОЕ: Проверка, есть ли угроза улью
+    hasThreat() {
+        const threatRadius = 20;
+        
+        for (const otherHive of window.game.hives) {
+            if (otherHive.id === this.id) continue;
+            
+            for (const unit of otherHive.units) {
+                if (unit.type === 'soldier') {
+                    const dist = Utils.distance(this.x + 1, this.y + 1, unit.x, unit.y);
+                    if (dist < threatRadius) return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    // ⭐ НОВОЕ: Определить, какую касту нужно вывести следующей
+    getDesiredUnitType() {
+        // Подсчёт юнитов по типам
+        const counts = { worker: 0, nurse: 0, scout: 0, soldier: 0 };
+        this.units.forEach(u => {
+            if (counts[u.type] !== undefined) counts[u.type]++;
+        });
+        
+        const total = counts.worker + counts.nurse + counts.scout + counts.soldier;
+        
+        // Первые 6 юнитов — ВСЕГДА рабочие (быстрый старт экономики)
+        if (this.totalHatched < 6) {
+            return this.canAffordUnit('worker') ? 'worker' : null;
+        }
+        
+        // Процентный состав популяции
+        const workerPercent = total > 0 ? counts.worker / total : 0;
+        const nursePercent = total > 0 ? counts.nurse / total : 0;
+        const scoutPercent = total > 0 ? counts.scout / total : 0;
+        const soldierPercent = total > 0 ? counts.soldier / total : 0;
+        
+        // === ПРИОРИТЕТЫ ВЫВОДА ===
+        
+        // 1. Если критически мало рабочих — нужен рабочий
+        if (counts.worker < 5 || workerPercent < 0.35) {
+            if (this.canAffordUnit('worker')) return 'worker';
+        }
+        
+        // 2. Если есть угроза и мало солдат — нужен солдат
+        if (this.hasThreat() && (counts.soldier < 3 || soldierPercent < 0.25)) {
+            if (this.canAffordUnit('soldier')) return 'soldier';
+        }
+        
+        // 3. Если мало нянек (они кормят личинок эффективно)
+        if (counts.nurse < 2 || nursePercent < 0.12) {
+            if (this.canAffordUnit('nurse')) return 'nurse';
+        }
+        
+        // 4. Если мало разведчиков (нужно исследовать карту)
+        if (counts.scout < 2 || scoutPercent < 0.12) {
+            if (this.canAffordUnit('scout')) return 'scout';
+        }
+        
+        // 5. Если есть угроза и можно позволить солдата — солдат
+        if (this.hasThreat() && this.canAffordUnit('soldier')) {
+            return 'soldier';
+        }
+        
+        // 6. Балансировка: если солдат слишком мало относительно популяции
+        if (soldierPercent < 0.2 && this.canAffordUnit('soldier')) {
+            return 'soldier';
+        }
+        
+        // 7. Если разведчиков мало — разведчик
+        if (scoutPercent < 0.15 && this.canAffordUnit('scout')) {
+            return 'scout';
+        }
+        
+        // 8. Если нянек мало — нянька
+        if (nursePercent < 0.15 && this.canAffordUnit('nurse')) {
+            return 'nurse';
+        }
+        
+        // 9. По умолчанию — рабочий (основа экономики)
+        if (this.canAffordUnit('worker')) return 'worker';
+        
+        // 10. Если вообще ничего не можем позволить — не выводим
+        return null;
+    }
+    
+    // ⭐ ИЗМЕНЁН: Отложить яйцо с учётом желаемой касты
     layEgg(currentTime) {
         if (currentTime - this.lastEggTime < this.eggCooldown) {
             return false;
@@ -93,19 +211,30 @@ class HiveManager {
             return false;
         }
         
+        // Стоимость яйца (биомасса для выживания)
         const eggCost = 2;
         if (!this.spendResource(ResourceType.BIOMASS, eggCost)) {
             return false;
         }
         
-        const larva = new Larva(this.x + 1, this.y + 1, this.id);
+        // ⭐ Определяем, какую касту хотим вывести
+        const desiredCast = this.getDesiredUnitType();
+        
+        // Если не можем позволить ни одного юнита — не откладываем яйцо
+        if (!desiredCast) {
+            // Возвращаем биомассу, т.к. яйцо не отложили
+            this.resources[ResourceType.BIOMASS] += eggCost;
+            return false;
+        }
+        
+        // Создаём личинку с меткой целевой касты
+        const larva = new Larva(this.x + 1, this.y + 1, this.id, desiredCast);
         this.larvae.push(larva);
         this.lastEggTime = currentTime;
         
         return true;
     }
     
-    // Получить общее количество слотов для личинок
     getTotalLarvaeSlots() {
         let slots = 6;
         
@@ -118,7 +247,6 @@ class HiveManager {
         return slots;
     }
     
-    // Получить общую емкость хранилищ
     getTotalStorageCapacity() {
         let solidCapacity = 50;
         let liquidCapacity = 30;
@@ -134,14 +262,12 @@ class HiveManager {
         return { solid: solidCapacity, liquid: liquidCapacity };
     }
     
-    // Обновить лимиты хранилищ
     updateStorageCapacity() {
         const capacity = this.getTotalStorageCapacity();
         this.solidStorageCapacity = capacity.solid;
         this.liquidStorageCapacity = capacity.liquid;
     }
     
-    // Определить, что нужно построить
     getConstructionPriority() {
         const storage = this.getTotalStorageCapacity();
         
@@ -170,7 +296,6 @@ class HiveManager {
         return null;
     }
     
-    // Построить структуру
     buildStructure(type, x, y) {
         let structure = null;
         
@@ -197,7 +322,6 @@ class HiveManager {
         return true;
     }
     
-    // Обновление личинок
     updateLarvae(deltaTime) {
         this.larvae.forEach(larva => {
             larva.update(deltaTime, this);
@@ -210,26 +334,33 @@ class HiveManager {
         this.larvae = this.larvae.filter(l => !l.isDead());
     }
     
-    // Вылупление личинки
+    // ⭐ ИЗМЕНЁН: Вылупление по заранее определённой касте
     hatchLarva(larva) {
         let unit = null;
         
         const spawnX = this.x + 1 + Utils.random(-2, 2);
         const spawnY = this.y + 1 + Utils.random(-2, 2);
         
-        const fedResources = larva.getFedResources();
-        
-        if (fedResources[ResourceType.BIOPLASMA] >= 5 && fedResources[ResourceType.CHITIN] >= 2) {
-            unit = new Soldier(spawnX, spawnY, this.id);
-        } else if (fedResources[ResourceType.BIOPLASMA] >= 5) {
-            unit = new Scout(spawnX, spawnY, this.id);
-        } else if (fedResources[ResourceType.BIOPLASMA] >= 2 && fedResources[ResourceType.BIOMASS] >= 1) {
-            unit = new Nurse(spawnX, spawnY, this.id);
-        } else {
-            unit = new Worker(spawnX, spawnY, this.id);
+        // Создаём юнита той касты, которая была запланирована
+        switch(larva.desiredCast) {
+            case 'worker':
+                unit = new Worker(spawnX, spawnY, this.id);
+                break;
+            case 'nurse':
+                unit = new Nurse(spawnX, spawnY, this.id);
+                break;
+            case 'scout':
+                unit = new Scout(spawnX, spawnY, this.id);
+                break;
+            case 'soldier':
+                unit = new Soldier(spawnX, spawnY, this.id);
+                break;
+            default:
+                unit = new Worker(spawnX, spawnY, this.id);
         }
         
         this.addUnit(unit);
+        this.totalHatched++;
         
         const index = this.larvae.indexOf(larva);
         if (index > -1) {
@@ -237,7 +368,6 @@ class HiveManager {
         }
     }
     
-    // Обновление улья
     update(deltaTime, currentTime, pheromoneSystem) {
         if (this.initialEggsLaid < this.maxInitialEggs) {
             if (this.layEgg(currentTime)) {
@@ -264,16 +394,18 @@ class HiveManager {
     }
 }
 
-// Класс личинки
+// ⭐ ИЗМЕНЁН: Класс личинки
 class Larva {
-    constructor(x, y, hiveId) {
+    constructor(x, y, hiveId, desiredCast) {
         this.x = x;
         this.y = y;
         this.hiveId = hiveId;
         this.hp = 10;
         this.maxHP = 10;
         
-        // Ресурсы, которыми кормили личинку
+        // ⭐ НОВОЕ: Целевая каста, определённая королевой
+        this.desiredCast = desiredCast || 'worker';
+        
         this.fedResources = {
             [ResourceType.BIOMASS]: 0,
             [ResourceType.BIOPLASMA]: 0,
@@ -283,33 +415,41 @@ class Larva {
         
         // Таймеры
         this.lastFeedTime = 0;
-        this.feedCooldown = 180000; // 3 минуты
-        this.lastBioplasmaFeedTime = 0;
-        this.bioplasmaFeedCooldown = 60000; // 1 минута между порциями плазмы
+        this.feedCooldown = 180000; // 3 минуты — биомасса для выживания
+        this.lastDevelopmentFeedTime = 0;
+        this.developmentFeedCooldown = 60000; // 1 минута — развивающие ресурсы
         
         this.starvationTimer = 0;
         this.maxStarvationTime = 180000;
         
-        // Прогресс развития
         this.developmentProgress = 0;
         this.requiredDevelopment = 100;
     }
     
-    // Покормить личинку
-    feed(resourceType, amount) {
+    // ⭐ НОВОЕ: Получить требуемые развивающие ресурсы для целевой касты
+    getRequiredDevelopmentResources() {
+        switch(this.desiredCast) {
+            case 'worker':
+                return { type: ResourceType.BIOPLASMA, amountPerFeed: 1, progressPerFeed: 34 };
+            case 'nurse':
+                return { type: ResourceType.BIOPLASMA, amountPerFeed: 1, progressPerFeed: 50 };
+            case 'scout':
+                return { type: ResourceType.BIOPLASMA, amountPerFeed: 1, progressPerFeed: 20 };
+            case 'soldier':
+                // Солдату нужно и плазма, и хитин — чередуем
+                return null; // Особая логика
+        }
+        return { type: ResourceType.BIOPLASMA, amountPerFeed: 1, progressPerFeed: 34 };
+    }
+    
+    feed(resourceType, amount, progressGain) {
         this.fedResources[resourceType] += amount;
         this.lastFeedTime = Date.now();
         this.starvationTimer = 0;
         
-        // Био плазма ускоряет развитие
-        if (resourceType === ResourceType.BIOPLASMA) {
-            this.developmentProgress += amount * 20; // 20% за единицу плазмы
-            this.lastBioplasmaFeedTime = Date.now();
-        }
-        
-        // Био масса тоже немного помогает развитию
-        if (resourceType === ResourceType.BIOMASS) {
-            this.developmentProgress += amount * 2; // 2% за единицу биомассы
+        // Увеличиваем прогресс развития
+        if (progressGain) {
+            this.developmentProgress += progressGain;
         }
     }
     
@@ -333,25 +473,53 @@ class Larva {
             }
         }
         
-        // Кормление личинки
         this.tryToFeed(hive, currentTime);
     }
     
-    // Попытка покормить личинку
+    // ⭐ ИЗМЕНЁН: Кормление с учётом целевой касты
     tryToFeed(hive, currentTime) {
-        // 1. Кормление биомассой (для выживания) - раз в 3 минуты
+        // 1. Кормление биомассой (для выживания) — раз в 3 минуты
         if (currentTime - this.lastFeedTime >= this.feedCooldown) {
             if (hive.resources[ResourceType.BIOMASS] >= 1) {
                 hive.spendResource(ResourceType.BIOMASS, 1);
-                this.feed(ResourceType.BIOMASS, 1);
+                this.feed(ResourceType.BIOMASS, 1, 0); // Биомасса не даёт прогресс
             }
         }
         
-        // 2. Кормление био плазмой (для развития) - раз в минуту
-        if (currentTime - this.lastBioplasmaFeedTime >= this.bioplasmaFeedCooldown) {
-            if (hive.resources[ResourceType.BIOPLASMA] >= 1) {
-                hive.spendResource(ResourceType.BIOPLASMA, 1);
-                this.feed(ResourceType.BIOPLASMA, 1);
+        // 2. Кормление развивающими ресурсами — раз в минуту
+        if (currentTime - this.lastDevelopmentFeedTime >= this.developmentFeedCooldown) {
+            
+            if (this.desiredCast === 'soldier') {
+                // ⭐ Особая логика для солдата: нужно и плазма, и хитин
+                // Чередует: сначала плазма, потом хитин
+                const bioplasmaFed = this.fedResources[ResourceType.BIOPLASMA];
+                const chitinFed = this.fedResources[ResourceType.CHITIN];
+                
+                if (bioplasmaFed < 5 && hive.resources[ResourceType.BIOPLASMA] >= 1) {
+                    // Нужно больше плазмы
+                    hive.spendResource(ResourceType.BIOPLASMA, 1);
+                    this.feed(ResourceType.BIOPLASMA, 1, 10);
+                    this.lastDevelopmentFeedTime = currentTime;
+                } else if (chitinFed < 2 && hive.resources[ResourceType.CHITIN] >= 1) {
+                    // Нужно больше хитина
+                    hive.spendResource(ResourceType.CHITIN, 1);
+                    this.feed(ResourceType.CHITIN, 1, 15);
+                    this.lastDevelopmentFeedTime = currentTime;
+                }
+                // Если и того и другого достаточно — просто ждём прогресса
+                else if (bioplasmaFed >= 5 && chitinFed >= 2) {
+                    // Даём небольшой пассивный прогресс
+                    this.developmentProgress += 5;
+                    this.lastDevelopmentFeedTime = currentTime;
+                }
+            } else {
+                // Обычная логика для других каст
+                const required = this.getRequiredDevelopmentResources();
+                if (required && hive.resources[required.type] >= required.amountPerFeed) {
+                    hive.spendResource(required.type, required.amountPerFeed);
+                    this.feed(required.type, required.amountPerFeed, required.progressPerFeed);
+                    this.lastDevelopmentFeedTime = currentTime;
+                }
             }
         }
     }
