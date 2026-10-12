@@ -35,6 +35,7 @@ class CombatSystem {
         this.handleDeaths(hives, pheromoneSystem);
     }
     
+    // Найти ближайшего врага (ВСЕХ - включая рабочих)
     findNearestEnemy(unit, hive, hives, maxDistance = null) {
         if (maxDistance === null) {
             maxDistance = this.visionRange;
@@ -73,6 +74,7 @@ class CombatSystem {
         return nearestEnemy;
     }
     
+    // Обновление солдата
     updateSoldier(unit, hive, hives, deltaTime, pheromoneSystem) {
         const enemy = this.findNearestEnemy(unit, hive, hives);
         
@@ -117,6 +119,7 @@ class CombatSystem {
         }
     }
     
+    // Обновление разведчика
     updateScout(unit, hive, hives, deltaTime, pheromoneSystem) {
         const enemy = this.findNearestEnemy(unit, hive, hives);
         
@@ -209,6 +212,7 @@ class CombatSystem {
         }
     }
     
+    // Обновление рабочего - ИСПРАВЛЕННАЯ ЛОГИКА
     updateWorker(unit, hive, hives, deltaTime, pheromoneSystem) {
         const isBusy = (unit.state === 'returning' || 
                         unit.state === 'gathering' || 
@@ -219,9 +223,6 @@ class CombatSystem {
             
             if (enemy) {
                 unit.state = 'fleeing';
-                
-                const enemyX = enemy.x !== undefined ? enemy.x : enemy.x + enemy.size / 2;
-                const enemyY = enemy.y !== undefined ? enemy.y : enemy.y + enemy.size / 2;
                 
                 const hiveX = hive.x + 1;
                 const hiveY = hive.y + 1;
@@ -256,6 +257,7 @@ class CombatSystem {
                 break;
                 
             case 'moving_to_resource':
+                // ⭐ ИСПРАВЛЕНО: передаём deltaTime правильным порядком
                 this.workerMoveToResource(unit, hive, pheromoneSystem, deltaTime);
                 break;
                 
@@ -312,54 +314,28 @@ class CombatSystem {
         }
     }
     
+    // ⭐ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ЗДЕСЬ
     workerMoveToResource(unit, hive, pheromoneSystem, deltaTime) {
         unit.depositPheromone(pheromoneSystem, PheromoneType.HOME, 0.1);
         
+        // Используем переданный deltaTime для движения
         const dist = unit.moveTowards(unit.targetX, unit.targetY, deltaTime);
         
-        // ⭐ ИСПРАВЛЕНИЕ: Проверяем ресурс в ТЕКУЩЕЙ позиции рабочего, а не в целевой!
-        const currentTileX = Math.floor(unit.x);
-        const currentTileY = Math.floor(unit.y);
+        const resource = window.game.gameMap.resourceManager.getResourceAt(
+            Math.floor(unit.targetX),
+            Math.floor(unit.targetY)
+        );
         
-        // Проверяем текущую позицию и соседние тайлы (радиус 1)
-        let foundResource = null;
-        
-        // Сначала проверяем текущий тайл
-        const currentResource = window.game.gameMap.resourceManager.getResourceAt(currentTileX, currentTileY);
-        if (currentResource && currentResource.hasResource()) {
-            foundResource = currentResource;
-        } else {
-            // Если нет, проверяем соседние тайлы
-            const neighbors = [
-                { dx: 0, dy: 0 },
-                { dx: 1, dy: 0 },
-                { dx: -1, dy: 0 },
-                { dx: 0, dy: 1 },
-                { dx: 0, dy: -1 }
-            ];
-            
-            for (const n of neighbors) {
-                const nx = currentTileX + n.dx;
-                const ny = currentTileY + n.dy;
-                const neighborResource = window.game.gameMap.resourceManager.getResourceAt(nx, ny);
-                if (neighborResource && neighborResource.hasResource()) {
-                    foundResource = neighborResource;
-                    break;
-                }
-            }
-        }
-        
-        if (foundResource) {
-            unit.targetResource = foundResource;
+        if (resource && resource.hasResource()) {
+            unit.targetResource = resource;
             unit.state = 'gathering';
         } else if (dist <= 1) {
-            // Достигли цели, но ресурса нет - ищем новый
             unit.state = 'idle';
             unit.targetResource = null;
         }
     }
     
-    workerGatherResource(unit, hive, pheromoneSystem, deltaTime) {
+    workerGatherResource(unit, deltaTime, hive, pheromoneSystem) {
         if (!unit.targetResource || !unit.targetResource.hasResource()) {
             unit.state = 'idle';
             unit.targetResource = null;
@@ -401,7 +377,7 @@ class CombatSystem {
         }
     }
     
-    workerReturnToHive(unit, hive, pheromoneSystem, deltaTime) {
+    workerReturnToHive(unit, deltaTime, hive, pheromoneSystem) {
         if (unit.carrying) {
             unit.depositPheromone(
                 pheromoneSystem,
@@ -426,7 +402,74 @@ class CombatSystem {
         }
     }
     
-    workerMoveToConstruction(unit, hive, pheromoneSystem, deltaTime) {
+    workerTryToStartConstruction(unit, hive) {
+        const priority = hive.getConstructionPriority();
+        if (!priority) return false;
+        
+        const type = priority.type;
+        
+        let canBuild = false;
+        switch(type) {
+            case 'storage_solid':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 8 && hive.resources[ResourceType.CHITIN] >= 3;
+                break;
+            case 'storage_liquid':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 10 && hive.resources[ResourceType.CHITIN] >= 5;
+                break;
+            case 'incubator':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 10 && hive.resources[ResourceType.CHITIN] >= 5;
+                break;
+            case 'biomass_farm':
+                canBuild = hive.resources[ResourceType.BIOMASS] >= 70 && hive.resources[ResourceType.CHITIN] >= 10;
+                break;
+        }
+        
+        if (!canBuild) return false;
+        
+        const structureSize = this.getStructureSize(type);
+        const spot = window.game.gameMap.findConstructionSpot(hive.x, hive.y, structureSize);
+        
+        if (!spot) return false;
+        
+        let structure = null;
+        switch(type) {
+            case 'storage_solid':
+                structure = new StorageSolid(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'storage_liquid':
+                structure = new StorageLiquid(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'incubator':
+                structure = new Incubator(spot.x, spot.y, hive.id, hive.color);
+                break;
+            case 'biomass_farm':
+                structure = new BiomassFarm(spot.x, spot.y, hive.id, hive.color);
+                break;
+        }
+        
+        unit.constructionTarget = structure;
+        unit.buildProgress = 0;
+        unit.targetX = spot.x + structureSize / 2;
+        unit.targetY = spot.y + structureSize / 2;
+        unit.state = 'moving_to_build';
+        
+        return true;
+    }
+    
+    getStructureSize(type) {
+        switch(type) {
+            case 'storage_solid':
+            case 'storage_liquid':
+            case 'incubator':
+                return 2;
+            case 'biomass_farm':
+                return 3;
+            default:
+                return 2;
+        }
+    }
+    
+    workerMoveToConstruction(unit, deltaTime, hive, pheromoneSystem) {
         if (!unit.constructionTarget) {
             unit.state = 'idle';
             return;
@@ -438,7 +481,7 @@ class CombatSystem {
         }
     }
     
-    workerBuild(unit, hive, pheromoneSystem, deltaTime) {
+    workerBuild(unit, deltaTime, hive, pheromoneSystem) {
         if (!unit.constructionTarget) {
             unit.state = 'idle';
             return;
