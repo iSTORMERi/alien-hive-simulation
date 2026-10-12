@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alien Hive Simulation</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             margin: 0;
-            padding: 20px;
+            padding: 10px;
             background-color: #1a1a1a;
             color: #ffffff;
             font-family: Arial, sans-serif;
@@ -17,44 +21,98 @@
         }
         
         h1 {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
+            font-size: 20px;
+            text-align: center;
         }
         
         #gameContainer {
             display: flex;
-            gap: 20px;
-            align-items: flex-start;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 1400px;
+        }
+        
+        @media (min-width: 1400px) {
+            #gameContainer {
+                flex-direction: row;
+                align-items: flex-start;
+            }
+        }
+        
+        #canvasWrapper {
+            position: relative;
+            overflow: auto;
+            max-width: 100%;
+            max-height: 70vh;
+            border: 2px solid #444;
+            background-color: #0a0a0a;
+            -webkit-overflow-scrolling: touch; /* Плавная прокрутка на iOS */
         }
         
         #gameCanvas {
-            border: 2px solid #444;
-            background-color: #0a0a0a;
+            display: block;
+            image-rendering: pixelated;
+        }
+        
+        #zoomControls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            gap: 5px;
+            z-index: 10;
+        }
+        
+        .zoom-btn {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            font-size: 20px;
+            font-weight: bold;
+            background-color: rgba(50, 50, 50, 0.9);
+            border: 1px solid #666;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .zoom-btn:hover {
+            background-color: rgba(80, 80, 80, 0.9);
         }
         
         #sidebar {
-            width: 280px;
+            width: 100%;
             background-color: #222;
             border: 1px solid #444;
             border-radius: 4px;
-            padding: 15px;
+            padding: 10px;
+        }
+        
+        @media (min-width: 1400px) {
+            #sidebar {
+                width: 280px;
+                flex-shrink: 0;
+            }
         }
         
         .hive-info {
-            margin-bottom: 15px;
-            padding: 10px;
+            margin-bottom: 10px;
+            padding: 8px;
             border-radius: 4px;
             background-color: #2a2a2a;
             border-left: 4px solid;
         }
         
         .hive-info h3 {
-            margin: 0 0 8px 0;
-            font-size: 14px;
+            margin: 0 0 5px 0;
+            font-size: 13px;
         }
         
         .resource-line {
-            font-size: 12px;
-            margin: 3px 0;
+            font-size: 11px;
+            margin: 2px 0;
             display: flex;
             justify-content: space-between;
         }
@@ -68,26 +126,29 @@
         }
         
         .units-line {
-            font-size: 11px;
+            font-size: 10px;
             color: #888;
-            margin-top: 5px;
+            margin-top: 4px;
             border-top: 1px solid #333;
-            padding-top: 5px;
+            padding-top: 4px;
         }
         
         #controls {
-            margin-top: 20px;
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
         }
         
         button {
             padding: 10px 20px;
-            font-size: 16px;
+            font-size: 14px;
             cursor: pointer;
             background-color: #4CAF50;
             color: white;
             border: none;
             border-radius: 4px;
-            margin: 0 5px;
         }
         
         button:hover {
@@ -96,13 +157,14 @@
         
         #info {
             margin-top: 10px;
-            font-size: 14px;
+            font-size: 12px;
             color: #aaa;
+            text-align: center;
         }
         
         .legend {
-            margin-top: 15px;
-            padding: 10px;
+            margin-top: 10px;
+            padding: 8px;
             background-color: #2a2a2a;
             border-radius: 4px;
             font-size: 11px;
@@ -111,7 +173,7 @@
         .legend-item {
             display: flex;
             align-items: center;
-            margin: 4px 0;
+            margin: 3px 0;
         }
         
         .legend-color {
@@ -119,6 +181,12 @@
             height: 12px;
             margin-right: 8px;
             border-radius: 2px;
+            flex-shrink: 0;
+        }
+        
+        h2 {
+            margin-top: 0;
+            font-size: 15px;
         }
     </style>
 </head>
@@ -126,10 +194,17 @@
     <h1>👽 Alien Hive Simulation</h1>
     
     <div id="gameContainer">
-        <canvas id="gameCanvas" width="1200" height="1200"></canvas>
+        <div id="canvasWrapper">
+            <div id="zoomControls">
+                <button class="zoom-btn" id="zoomOutBtn">−</button>
+                <button class="zoom-btn" id="zoomResetBtn">⟲</button>
+                <button class="zoom-btn" id="zoomInBtn">+</button>
+            </div>
+            <canvas id="gameCanvas" width="1200" height="1200"></canvas>
+        </div>
         
         <div id="sidebar">
-            <h2 style="margin-top: 0; font-size: 16px;">📊 Статистика ульев</h2>
+            <h2>📊 Статистика ульев</h2>
             <div id="hivesInfo"></div>
             
             <div class="legend">
@@ -155,8 +230,8 @@
     </div>
     
     <div id="controls">
-        <button id="startBtn">Start Simulation</button>
-        <button id="pauseBtn">Pause</button>
+        <button id="startBtn">▶ Start</button>
+        <button id="pauseBtn">⏸ Pause</button>
     </div>
     <div id="info">
         <span id="fps">FPS: 0</span> | 
