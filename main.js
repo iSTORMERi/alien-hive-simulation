@@ -3,11 +3,15 @@
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        
+        // Логический размер карты
         this.mapWidth = 150;
         this.mapHeight = 150;
-        this.tileSize = 8;
+        this.baseTileSize = 8;
+        this.tileSize = this.baseTileSize;
         
-        // Установка размера canvas
+        // Физический размер canvas
         this.canvas.width = this.mapWidth * this.tileSize;
         this.canvas.height = this.mapHeight * this.tileSize;
         
@@ -48,6 +52,11 @@ class Game {
         document.getElementById('startBtn').addEventListener('click', () => this.start());
         document.getElementById('pauseBtn').addEventListener('click', () => this.pause());
         
+        // Обработчики зума
+        document.getElementById('zoomInBtn').addEventListener('click', () => this.zoom(1.25));
+        document.getElementById('zoomOutBtn').addEventListener('click', () => this.zoom(0.8));
+        document.getElementById('zoomResetBtn').addEventListener('click', () => this.resetZoom());
+        
         // Первый рендер
         this.renderer.render(this.hives, this.pheromoneSystem);
     }
@@ -78,10 +87,49 @@ class Game {
             
             hiveManager.createQueen();
             
-            hiveManager.addResource(ResourceType.BIOMASS, 20);
+            // ⭐ БОЛЬШОЙ начальный запас ресурсов (с запасом!)
+            // 6 яиц * 2 биомассы = 12 биомассы нужно для яиц
+            // + 6 личинок * 3 биомассы (на развитие) = 18 биомассы
+            // + 6 личинок * 3 био плазмы (на развитие) = 18 био плазмы
+            // + запас на первые минуты жизни рабочих
+            hiveManager.addResource(ResourceType.BIOMASS, 50);      // Было 20, стало 50
+            hiveManager.addResource(ResourceType.BIOPLASMA, 30);    // ⭐ НОВОЕ! Было 0, стало 30
             
             this.gameMap.spawnStartingResources(pos.x, pos.y);
         });
+    }
+    
+    // Зум
+    zoom(factor) {
+        const newTileSize = Math.max(2, Math.min(16, Math.round(this.tileSize * factor)));
+        
+        if (newTileSize === this.tileSize) return;
+        
+        this.tileSize = newTileSize;
+        this.canvas.width = this.mapWidth * this.tileSize;
+        this.canvas.height = this.mapHeight * this.tileSize;
+        
+        // Обновляем tileSize у карты и рендерера
+        this.gameMap.tileSize = this.tileSize;
+        this.renderer.tileSize = this.tileSize;
+        
+        // Перерисовка
+        if (!this.isRunning) {
+            this.renderer.render(this.hives, this.pheromoneSystem);
+        }
+    }
+    
+    // Сброс зума
+    resetZoom() {
+        this.tileSize = this.baseTileSize;
+        this.canvas.width = this.mapWidth * this.tileSize;
+        this.canvas.height = this.mapHeight * this.tileSize;
+        this.gameMap.tileSize = this.tileSize;
+        this.renderer.tileSize = this.tileSize;
+        
+        if (!this.isRunning) {
+            this.renderer.render(this.hives, this.pheromoneSystem);
+        }
     }
     
     // Запуск симуляции
@@ -127,16 +175,9 @@ class Game {
     
     // Обновление логики игры
     update(deltaTime, currentTime) {
-        // 1. Обновление карты (регенерация ресурсов)
         this.gameMap.update();
-        
-        // 2. Обновление системы феромонов (испарение)
         this.pheromoneSystem.update(deltaTime);
-        
-        // 3. Обновление ульев (яйца, личинки, юниты, фермы)
         this.hives.forEach(hive => hive.update(deltaTime, currentTime, this.pheromoneSystem));
-        
-        // 4. Обновление боевой системы (атаки, смерти, феромоны тревоги)
         this.combatSystem.update(deltaTime, this.hives, this.pheromoneSystem);
     }
 }
